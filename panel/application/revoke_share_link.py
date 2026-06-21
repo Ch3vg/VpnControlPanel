@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from panel.application.audit_service import AuditService
 from panel.domain.entities.user import User
 from panel.infrastructure.persistence.repositories.share_token import ShareTokenRepository
@@ -28,5 +30,16 @@ class RevokeShareLinkUseCase:
         await self._audit.log(
             "share.revoked",
             {"token_hash": token_hash},
+            user_id=user.id,
+        )
+
+    async def execute_by_id(self, link_id: uuid.UUID, user: User) -> None:
+        revoked = await self._shares.revoke_by_id(link_id)
+        if not revoked:
+            raise ShareNotFound
+
+        await self._audit.log(
+            "share.revoked",
+            {"link_id": str(link_id)},
             user_id=user.id,
         )

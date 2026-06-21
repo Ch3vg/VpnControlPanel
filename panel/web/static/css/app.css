@@ -279,6 +279,10 @@ tbody tr:hover {
   text-decoration: underline;
 }
 
+.link-btn.danger {
+  color: var(--danger, #f87171);
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

@@ -302,6 +302,21 @@ class VpnConfigRepository:
             config_data=dict(version_model.config_data),
         )
 
+    async def list_current_version_snapshots(self) -> list[ConfigVersionSnapshot]:
+        result = await self._session.execute(
+            select(VpnConfigModel).where(
+                VpnConfigModel.is_active.is_(True),
+                VpnConfigModel.status == ConfigStatus.ACTIVE.value,
+                VpnConfigModel.current_version.is_not(None),
+            ).order_by(VpnConfigModel.created_at.asc()),
+        )
+        snapshots: list[ConfigVersionSnapshot] = []
+        for model in result.scalars():
+            snapshot = await self.get_version_snapshot(model.id, model.current_version)
+            if snapshot is not None:
+                snapshots.append(snapshot)
+        return snapshots
+
     async def get_version_private_key(self, config_id: uuid.UUID, version: int) -> str | None:
         result = await self._session.execute(
             select(VpnConfigVersionModel.private_key).where(

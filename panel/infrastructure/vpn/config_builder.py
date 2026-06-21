@@ -133,6 +133,7 @@ class ProfileConfigBuilder:
         public_key: str,
         cert_fingerprint: str = "",
         label: str = "",
+        secure: bool = True,
     ) -> list[str]:
         profile_settings = self._settings.vpn.profiles[profile.value]
         return build_share_uris(
@@ -142,6 +143,7 @@ class ProfileConfigBuilder:
             public_key=public_key,
             cert_fingerprint=cert_fingerprint,
             inbound_tag=profile_settings.inbound_tag,
+            secure=secure,
         )
 
     def _resolve_template_path(self, template_file: str) -> Path:

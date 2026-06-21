@@ -157,6 +157,135 @@ function renderLogin() {
   });
 }
 
+function shareTtlFieldHtml(selectId) {
+  return `
+    <div class="field">
+      <label for="${selectId}">TTL</label>
+      <select id="${selectId}">
+        <option value="">Постоянная</option>
+        <option value="3600">1 час</option>
+        <option value="86400">24 часа</option>
+        <option value="604800">7 дней</option>
+        <option value="custom">Свой (секунды)</option>
+      </select>
+      <input id="${selectId}-custom" type="number" min="1" placeholder="TTL в секундах" class="hidden" style="margin-top:0.5rem">
+    </div>
+  `;
+}
+
+function bindShareTtlSelect(selectId) {
+  const select = document.getElementById(selectId);
+  const custom = document.getElementById(`${selectId}-custom`);
+  if (!select || !custom) return;
+  select.addEventListener("change", () => {
+    custom.classList.toggle("hidden", select.value !== "custom");
+  });
+}
+
+function buildSharePayload(secure, selectId) {
+  const payload = { secure, is_permanent: true };
+  const select = document.getElementById(selectId);
+  const custom = document.getElementById(`${selectId}-custom`);
+  let ttl = select?.value ?? "";
+  if (ttl === "custom") {
+    ttl = custom?.value ?? "";
+  }
+  if (ttl) {
+    payload.is_permanent = false;
+    payload.ttl_seconds = Number(ttl);
+  }
+  return payload;
+}
+
+function shareExpirationLabel(result) {
+  if (result.is_permanent) {
+    return "постоянная";
+  }
+  if (result.expires_at) {
+    return `до ${formatDate(result.expires_at)}`;
+  }
+  return "временная";
+}
+
+function formatShareExpires(item) {
+  if (item.is_permanent) {
+    return "Постоянная";
+  }
+  if (item.expires_at) {
+    return formatDate(item.expires_at);
+  }
+  return "—";
+}
+
+function renderShareLinksTable(items, { revokeHandlerId = "share-links-body" } = {}) {
+  if (!items.length) {
+    return `<div class="empty-state">Активных share-ссылок нет.</div>`;
+  }
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Область</th>
+            <th>Secure</th>
+            <th>Кем выпущена</th>
+            <th>Создана</th>
+            <th>Истекает</th>
+            <th>Обращений</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items
+            .map(
+              (item) => `
+            <tr>
+              <td>${escapeHtml(item.all_configs ? "Все конфиги" : item.config_name || item.config_id || "—")}</td>
+              <td>${item.secure ? "secure" : "insecure"}</td>
+              <td>${escapeHtml(item.created_by)}</td>
+              <td>${escapeHtml(formatDate(item.created_at))}</td>
+              <td>${escapeHtml(formatShareExpires(item))}</td>
+              <td>${item.access_count}</td>
+              <td><button type="button" class="link-btn danger revoke-share-link" data-id="${escapeHtml(item.id)}">Отозвать</button></td>
+            </tr>
+          `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function loadShareLinksList(containerId, params = {}) {
+  const bodyEl = document.getElementById(containerId);
+  if (!bodyEl) return;
+  bodyEl.innerHTML = `<span class="muted">Загрузка…</span>`;
+  try {
+    const data = await api.listShareLinks(params);
+    bodyEl.innerHTML = renderShareLinksTable(data.items);
+    bodyEl.querySelectorAll(".revoke-share-link").forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (!confirm("Отозвать share-ссылку?")) return;
+        try {
+          await api.revokeShareLinkById(button.dataset.id);
+          showToast("Share-ссылка отозвана", "success");
+          await loadShareLinksList(containerId, params);
+        } catch (error) {
+          showToast(errorMessage(error), "error");
+        }
+      });
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      api.clearToken();
+      navigate("/login");
+      return;
+    }
+    bodyEl.innerHTML = `<div class="error-box">${escapeHtml(errorMessage(error))}</div>`;
+  }
+}
+
 async function renderConfigs() {
   if (!requireAuth()) return;
 
@@ -179,6 +308,24 @@ async function renderConfigs() {
       </div>
       <div id="configs-body" class="muted">Загрузка…</div>
     </section>
+    <section class="card">
+      <h2 class="card-title">Share-ссылки</h2>
+      <p class="muted">Агрегированные ссылки на все активные конфиги. При каждом открытии подставляются текущие версии.</p>
+      ${shareTtlFieldHtml("share-all-ttl")}
+      <div class="btn-row">
+        <button type="button" class="secondary" id="share-all-secure">Все конфиги (secure)</button>
+        <button type="button" class="secondary" id="share-all-insecure">Все конфиги (insecure)</button>
+      </div>
+      <div id="share-all-result"></div>
+    </section>
+    <section class="card">
+      <div class="toolbar">
+        <h2 class="card-title" style="margin:0">Активные share-ссылки</h2>
+        <button type="button" class="secondary" id="share-links-refresh">Обновить</button>
+      </div>
+      <p class="muted">Неотозванные ссылки, у которых не истёк срок действия. URL хранится только при создании.</p>
+      <div id="share-links-body" class="muted">Загрузка…</div>
+    </section>
     <dialog id="create-dialog"></dialog>
   `;
 
@@ -188,8 +335,18 @@ async function renderConfigs() {
   });
   document.getElementById("create-btn").addEventListener("click", openCreateDialog);
   document.getElementById("protocol-filter").addEventListener("change", loadConfigsList);
+  bindShareTtlSelect("share-all-ttl");
+  document.getElementById("share-all-secure")?.addEventListener("click", () =>
+    handleAllShare(true, "share-all-result"),
+  );
+  document.getElementById("share-all-insecure")?.addEventListener("click", () =>
+    handleAllShare(false, "share-all-result"),
+  );
+  document.getElementById("share-links-refresh")?.addEventListener("click", () =>
+    loadShareLinksList("share-links-body"),
+  );
 
-  await loadConfigsList();
+  await Promise.all([loadConfigsList(), loadShareLinksList("share-links-body")]);
 }
 
 async function loadConfigsList() {
@@ -435,12 +592,21 @@ function renderConfigDetailContent(config, status) {
 
     <section class="card">
       <h2 class="card-title">Действия</h2>
+      ${shareTtlFieldHtml("share-ttl")}
       <div class="btn-row">
         <button type="button" id="regenerate-btn" ${canRegenerate ? "" : "disabled"}>Regenerate</button>
-        <button type="button" id="share-btn" ${canShare ? "" : "disabled"}>Share-ссылка</button>
+        <button type="button" id="share-secure-btn" ${canShare ? "" : "disabled"}>Share (secure)</button>
+        <button type="button" id="share-insecure-btn" ${canShare ? "" : "disabled"}>Share (insecure)</button>
         <button type="button" class="danger" id="delete-btn">Удалить</button>
       </div>
       <div id="share-result"></div>
+      <section style="margin-top:1rem">
+        <div class="toolbar">
+          <h3 class="card-title" style="margin:0;font-size:1rem">Активные share-ссылки</h3>
+          <button type="button" class="secondary" id="share-links-refresh">Обновить</button>
+        </div>
+        <div id="share-links-body" class="muted">Загрузка…</div>
+      </section>
       <div class="field" style="margin-top:1rem">
         <label for="revoke-token">Отозвать share по token</label>
         <div class="btn-row">
@@ -454,9 +620,19 @@ function renderConfigDetailContent(config, status) {
   document.getElementById("regenerate-btn")?.addEventListener("click", () =>
     handleRegenerate(config.id),
   );
-  document.getElementById("share-btn")?.addEventListener("click", () => handleShare(config.id));
+  bindShareTtlSelect("share-ttl");
+  document.getElementById("share-secure-btn")?.addEventListener("click", () =>
+    handleShare(config.id, true),
+  );
+  document.getElementById("share-insecure-btn")?.addEventListener("click", () =>
+    handleShare(config.id, false),
+  );
   document.getElementById("delete-btn")?.addEventListener("click", () => handleDelete(config.id));
   document.getElementById("revoke-btn")?.addEventListener("click", handleRevokeShare);
+  document.getElementById("share-links-refresh")?.addEventListener("click", () =>
+    loadShareLinksList("share-links-body", { config_id: config.id }),
+  );
+  loadShareLinksList("share-links-body", { config_id: config.id });
 }
 
 async function handleRegenerate(configId) {
@@ -470,23 +646,48 @@ async function handleRegenerate(configId) {
   }
 }
 
-async function handleShare(configId) {
-  const resultEl = document.getElementById("share-result");
+async function handleShare(configId, secure) {
+  showShareResult("share-result", () =>
+    api.createShareLink(configId, buildSharePayload(secure, "share-ttl")),
+  );
+}
+
+async function handleAllShare(secure, resultId) {
+  showShareResult(resultId, () =>
+    api.createAllShareLinks(buildSharePayload(secure, "share-all-ttl")),
+  );
+}
+
+async function showShareResult(resultId, createLink) {
+  const resultEl = document.getElementById(resultId);
   try {
-    const result = await api.createShareLink(configId);
+    const result = await createLink();
+    const scope = result.all_configs
+      ? `Все конфиги · ${result.secure ? "secure" : "insecure"} · ${result.config_count ?? "?"} профилей`
+      : `${result.secure ? "secure" : "insecure"}`;
+    const meta = `${scope} · ${shareExpirationLabel(result)}`;
     resultEl.innerHTML = `
       <div class="share-result">
         <strong>Share-ссылка создана</strong>
-        <code id="share-url">${escapeHtml(result.url)}</code>
+        <div class="muted" style="margin-top:0.35rem">${escapeHtml(meta)}</div>
+        <code id="share-url-${resultId}">${escapeHtml(result.url)}</code>
         <div class="btn-row" style="margin-top:0.75rem">
-          <button type="button" class="secondary" id="copy-share">Копировать</button>
+          <button type="button" class="secondary copy-share-btn" data-target="share-url-${resultId}">Копировать</button>
         </div>
       </div>
     `;
-    document.getElementById("copy-share").addEventListener("click", async () => {
-      await navigator.clipboard.writeText(result.url);
+    resultEl.querySelector(".copy-share-btn")?.addEventListener("click", async (event) => {
+      const targetId = event.currentTarget.dataset.target;
+      await navigator.clipboard.writeText(document.getElementById(targetId).textContent);
       showToast("Ссылка скопирована", "success");
     });
+    if (document.getElementById("share-links-body")) {
+      const routeMatch = location.hash.match(/#\/configs\/([0-9a-f-]+)/i);
+      await loadShareLinksList(
+        "share-links-body",
+        routeMatch ? { config_id: routeMatch[1] } : {},
+      );
+    }
   } catch (error) {
     resultEl.innerHTML = `<div class="error-box">${escapeHtml(errorMessage(error))}</div>`;
   }

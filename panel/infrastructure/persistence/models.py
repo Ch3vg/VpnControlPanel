@@ -107,12 +107,13 @@ class ShareTokenModel(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     token_hash: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
-    config_id: Mapped[uuid.UUID] = mapped_column(
+    config_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("vpn_configs.id"),
-        nullable=False,
+        nullable=True,
     )
-    config_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    config_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    secure: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_permanent: Mapped[bool] = mapped_column(Boolean, nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

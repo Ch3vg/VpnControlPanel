@@ -70,6 +70,40 @@ def test_grpc_share_uri_format(panel_settings) -> None:
     assert uri.endswith("#gRPC-Dynamic")
 
 
+def test_hysteria2_share_uri_insecure(panel_settings) -> None:
+    builder = ProfileConfigBuilder(panel_settings)
+    result = builder.build(ConfigProfile.HYSTERIA2, name="ignored")
+    uris = build_share_uris(
+        ConfigProfile.HYSTERIA2,
+        result.config_data,
+        host="chevg.ignorelist.com",
+        public_key="",
+        cert_fingerprint=result.cert_fingerprint,
+        secure=False,
+    )
+    uri = uris[0]
+    assert "pinSHA256=" not in uri
+    assert "insecure=1" in uri
+
+
+def test_grpc_share_uri_insecure(panel_settings) -> None:
+    builder = ProfileConfigBuilder(panel_settings)
+    result = builder.build(ConfigProfile.XRAY_GRPC, name="ignored")
+    uris = build_share_uris(
+        ConfigProfile.XRAY_GRPC,
+        result.config_data,
+        host="chevg.ignorelist.com",
+        public_key="",
+        cert_fingerprint=result.cert_fingerprint,
+        inbound_tag="vless-grpc-trusted",
+        secure=False,
+    )
+    uri = uris[0]
+    assert "pcs=" not in uri
+    assert "fragment=true" not in uri
+    assert "insecure=1" in uri
+
+
 def test_hysteria2_share_uri_format(panel_settings) -> None:
     builder = ProfileConfigBuilder(panel_settings)
     result = builder.build(ConfigProfile.HYSTERIA2, name="ignored")

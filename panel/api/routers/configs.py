@@ -28,8 +28,8 @@ from panel.application.create_config import CreateConfigUseCase
 from panel.application.create_share_link import (
     ConfigNotShareable,
     CreateShareLinkUseCase,
-    InvalidShareRequest,
 )
+from panel.application.share_expiration import InvalidShareRequest
 from panel.application.get_config_status import GetConfigStatusUseCase
 from panel.application.regenerate_config import ConfigNotRegeneratable, RegenerateConfigUseCase
 from panel.domain.value_objects.protocol import VpnProtocolType
@@ -135,8 +135,10 @@ async def create_share_link(
         result = await use_case.execute(
             config_id,
             user,
+            secure=body.secure,
             is_permanent=body.is_permanent,
             expires_at=body.expires_at,
+            ttl_seconds=body.ttl_seconds,
             public_base_url=str(request.base_url).rstrip("/"),
         )
     except ConfigNotFound:
@@ -146,7 +148,14 @@ async def create_share_link(
     except InvalidShareRequest as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from None
     await session.commit()
-    return CreateShareLinkResponse(token=result.token, url=result.url)
+    return CreateShareLinkResponse(
+        token=result.token,
+        url=result.url,
+        secure=result.secure,
+        all_configs=False,
+        is_permanent=result.is_permanent,
+        expires_at=result.expires_at,
+    )
 
 
 @router.get("/{config_id}/status", response_model=ConfigStatusResponse)

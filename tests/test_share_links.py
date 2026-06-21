@@ -76,6 +76,8 @@ async def test_create_share_link(
     body = response.json()
     assert body["token"]
     assert body["url"].endswith(f"/share/{body['token']}")
+    assert body["secure"] is True
+    assert body["all_configs"] is False
 
     async with create_session_factory(db_engine)() as session:
         result = await session.execute(select(ShareTokenModel))
@@ -85,6 +87,7 @@ async def test_create_share_link(
         assert row.config_id == config_id
         assert row.config_version == 1
         assert row.is_permanent is True
+        assert row.secure is True
 
         audit = await session.execute(
             select(AuditLogModel).where(AuditLogModel.event_type == "share.created"),
@@ -133,6 +136,7 @@ async def test_resolve_share_returns_uris(
             token_hash=hash_share_token(raw_token),
             config_id=config_id,
             config_version=1,
+            secure=True,
             is_permanent=True,
             expires_at=None,
             created_by=user_id,
@@ -180,6 +184,7 @@ async def test_resolve_share_expired(
             token_hash=hash_share_token(raw_token),
             config_id=config_id,
             config_version=1,
+            secure=True,
             is_permanent=False,
             expires_at=datetime.now(UTC) - timedelta(hours=1),
             created_by=user_id,
@@ -206,6 +211,7 @@ async def test_revoke_share(
             token_hash=hash_share_token(raw_token),
             config_id=config_id,
             config_version=1,
+            secure=True,
             is_permanent=True,
             expires_at=None,
             created_by=user_id,
@@ -241,6 +247,7 @@ async def test_share_pins_config_version(
             token_hash=hash_share_token(raw_token),
             config_id=config_id,
             config_version=1,
+            secure=True,
             is_permanent=True,
             expires_at=None,
             created_by=user_id,
@@ -268,6 +275,159 @@ async def test_share_pins_config_version(
     uris = [line for line in response.text.splitlines() if line.strip()]
     assert "10443" in uris[0]
     assert "20443" not in uris[0]
+
+
+@pytest.mark.asyncio
+async def test_create_all_share_links(
+    api_client: AsyncClient,
+    auth_headers: dict[str, str],
+    xray_share_config: tuple[uuid.UUID, dict],
+    db_engine: AsyncEngine,
+) -> None:
+    response = await api_client.post(
+        "/api/v1/share/all",
+        headers=auth_headers,
+        json={"is_permanent": True, "secure": True},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["all_configs"] is True
+    assert body["secure"] is True
+    assert body["config_count"] == 1
+
+    async with create_session_factory(db_engine)() as session:
+        result = await session.execute(select(ShareTokenModel))
+        row = result.scalar_one()
+        assert row.config_id is None
+        assert row.config_version is None
+        assert row.secure is True
+
+    get_response = await api_client.get(f"/share/{body['token']}")
+    assert get_response.status_code == 200
+    uris = [line for line in get_response.text.splitlines() if line.strip()]
+    assert len(uris) == 1
+
+
+@pytest.mark.asyncio
+async def test_create_share_link_insecure(
+    api_client: AsyncClient,
+    auth_headers: dict[str, str],
+    xray_share_config: tuple[uuid.UUID, dict],
+    db_engine: AsyncEngine,
+) -> None:
+    config_id, _ = xray_share_config
+    response = await api_client.post(
+        f"/api/v1/configs/{config_id}/share",
+        headers=auth_headers,
+        json={"is_permanent": True, "secure": False},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["secure"] is False
+
+    get_response = await api_client.get(f"/share/{body['token']}")
+    uris = [line for line in get_response.text.splitlines() if line.strip()]
+    assert "fragment=true" not in uris[0]
+
+
+@pytest.mark.asyncio
+async def test_create_share_link_with_ttl(
+    api_client: AsyncClient,
+    auth_headers: dict[str, str],
+    xray_share_config: tuple[uuid.UUID, dict],
+    db_engine: AsyncEngine,
+) -> None:
+    config_id, _ = xray_share_config
+    response = await api_client.post(
+        f"/api/v1/configs/{config_id}/share",
+        headers=auth_headers,
+        json={"is_permanent": False, "secure": True, "ttl_seconds": 3600},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["is_permanent"] is False
+    assert body["expires_at"] is not None
+
+    async with create_session_factory(db_engine)() as session:
+        result = await session.execute(select(ShareTokenModel))
+        row = result.scalar_one()
+        assert row.is_permanent is False
+        assert row.expires_at is not None
+
+
+@pytest.mark.asyncio
+async def test_list_active_share_links(
+    api_client: AsyncClient,
+    auth_headers: dict[str, str],
+    xray_share_config: tuple[uuid.UUID, dict],
+    admin_user: tuple[str, str, uuid.UUID],
+) -> None:
+    config_id, _ = xray_share_config
+    username, _, _ = admin_user
+
+    create_response = await api_client.post(
+        f"/api/v1/configs/{config_id}/share",
+        headers=auth_headers,
+        json={"is_permanent": True, "secure": True},
+    )
+    assert create_response.status_code == 201
+    link_id = None
+
+    list_response = await api_client.get("/api/v1/share/links", headers=auth_headers)
+    assert list_response.status_code == 200
+    body = list_response.json()
+    assert body["total"] == 1
+    item = body["items"][0]
+    link_id = item["id"]
+    assert item["all_configs"] is False
+    assert item["config_id"] == str(config_id)
+    assert item["config_name"] == "Office"
+    assert item["created_by"] == username
+    assert item["is_permanent"] is True
+    assert item["expires_at"] is None
+
+    filtered = await api_client.get(
+        f"/api/v1/share/links?config_id={config_id}",
+        headers=auth_headers,
+    )
+    assert filtered.status_code == 200
+    assert filtered.json()["total"] == 1
+
+    revoke_response = await api_client.delete(
+        f"/api/v1/share/links/{link_id}",
+        headers=auth_headers,
+    )
+    assert revoke_response.status_code == 204
+
+    empty = await api_client.get("/api/v1/share/links", headers=auth_headers)
+    assert empty.json()["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_list_active_share_links_excludes_expired(
+    api_client: AsyncClient,
+    auth_headers: dict[str, str],
+    xray_share_config: tuple[uuid.UUID, dict],
+    db_engine: AsyncEngine,
+) -> None:
+    config_id, _ = xray_share_config
+    async with create_session_factory(db_engine)() as session:
+        _, _, user_id = await _get_admin(session)
+        model = ShareTokenModel(
+            token_hash=hash_share_token(generate_share_token()),
+            config_id=config_id,
+            config_version=1,
+            secure=True,
+            is_permanent=False,
+            expires_at=datetime.now(UTC) - timedelta(hours=1),
+            created_by=user_id,
+        )
+        session.add(model)
+        await session.commit()
+
+    response = await api_client.get("/api/v1/share/links", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["total"] == 0
 
 
 async def _get_admin(session: AsyncSession) -> tuple[str, str, uuid.UUID]:

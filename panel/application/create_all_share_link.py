@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from panel.application.audit_service import AuditService
+from panel.application.create_share_link import ConfigNotShareable
 from panel.application.share_expiration import resolve_share_expiration
-from panel.application.configs import ConfigNotFound
 from panel.domain.entities.user import User
 from panel.domain.value_objects.config_status import ConfigStatus
 from panel.infrastructure.persistence.repositories.share_token import ShareTokenRepository
@@ -14,22 +14,17 @@ from panel.infrastructure.persistence.repositories.vpn_config import VpnConfigRe
 from panel.infrastructure.security.share_token import generate_share_token, hash_share_token
 
 
-class ConfigNotShareable(Exception):
-    pass
-
-
 @dataclass(frozen=True, slots=True)
-class CreateShareLinkResult:
+class CreateAllShareLinksResult:
     token: str
     url: str
-    config_id: uuid.UUID
-    config_version: int
     secure: bool
+    config_count: int
     is_permanent: bool
     expires_at: datetime | None
 
 
-class CreateShareLinkUseCase:
+class CreateAllShareLinksUseCase:
     def __init__(
         self,
         configs: VpnConfigRepository,
@@ -42,7 +37,6 @@ class CreateShareLinkUseCase:
 
     async def execute(
         self,
-        config_id: uuid.UUID,
         user: User,
         *,
         secure: bool,
@@ -50,25 +44,23 @@ class CreateShareLinkUseCase:
         expires_at: datetime | None,
         ttl_seconds: int | None,
         public_base_url: str,
-    ) -> CreateShareLinkResult:
+    ) -> CreateAllShareLinksResult:
         expiration = resolve_share_expiration(
             is_permanent=is_permanent,
             expires_at=expires_at,
             ttl_seconds=ttl_seconds,
         )
 
-        config = await self._configs.get_by_id(config_id)
-        if config is None:
-            raise ConfigNotFound
-        if config.current_version is None or config.status is not ConfigStatus.ACTIVE:
-            raise ConfigNotShareable("Config is not ready for sharing")
+        snapshots = await self._configs.list_current_version_snapshots()
+        if not snapshots:
+            raise ConfigNotShareable("No active configs available for sharing")
 
         raw_token = generate_share_token()
         token_hash = hash_share_token(raw_token)
         await self._shares.create(
             token_hash=token_hash,
-            config_id=config_id,
-            config_version=config.current_version,
+            config_id=None,
+            config_version=None,
             secure=secure,
             is_permanent=expiration.is_permanent,
             expires_at=expiration.expires_at,
@@ -78,9 +70,9 @@ class CreateShareLinkUseCase:
         await self._audit.log(
             "share.created",
             {
-                "config_id": str(config_id),
-                "config_version": config.current_version,
+                "all_configs": True,
                 "secure": secure,
+                "config_count": len(snapshots),
                 "is_permanent": expiration.is_permanent,
                 "expires_at": expiration.expires_at.isoformat() if expiration.expires_at else None,
                 "ttl_seconds": ttl_seconds,
@@ -89,12 +81,11 @@ class CreateShareLinkUseCase:
         )
 
         base = public_base_url.rstrip("/")
-        return CreateShareLinkResult(
+        return CreateAllShareLinksResult(
             token=raw_token,
             url=f"{base}/share/{raw_token}",
-            config_id=config_id,
-            config_version=config.current_version,
             secure=secure,
+            config_count=len(snapshots),
             is_permanent=expiration.is_permanent,
             expires_at=expiration.expires_at,
         )

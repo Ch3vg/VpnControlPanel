@@ -32,6 +32,8 @@ HTTP_REQUEST_DURATION_SECONDS = Histogram(
 def normalize_path(path: str) -> str:
     if path.startswith("/share/"):
         return "/share/{token}"
+    if path.startswith("/api/v1/share/links"):
+        return "/api/v1/share/links"
     if path.startswith("/api/v1/share/"):
         return "/api/v1/share/{token}"
     return UUID_PATTERN.sub("{id}", path)

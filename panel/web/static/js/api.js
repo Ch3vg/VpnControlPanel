@@ -95,8 +95,23 @@ export class ApiClient {
     return this.request("DELETE", `/api/v1/configs/${id}`);
   }
 
-  createShareLink(id, payload = { is_permanent: true }) {
+  createShareLink(id, payload = { is_permanent: true, secure: true }) {
     return this.request("POST", `/api/v1/configs/${id}/share`, payload);
+  }
+
+  createAllShareLinks(payload = { is_permanent: true, secure: true }) {
+    return this.request("POST", "/api/v1/share/all", payload);
+  }
+
+  listShareLinks(params = {}) {
+    const query = new URLSearchParams();
+    if (params.config_id) query.set("config_id", params.config_id);
+    const suffix = query.toString() ? `?${query}` : "";
+    return this.request("GET", `/api/v1/share/links${suffix}`);
+  }
+
+  revokeShareLinkById(id) {
+    return this.request("DELETE", `/api/v1/share/links/${id}`);
   }
 
   revokeShareLink(token) {
