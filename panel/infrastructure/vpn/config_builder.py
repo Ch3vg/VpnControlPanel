@@ -17,6 +17,7 @@ from panel.infrastructure.vpn.port_picker import pick_port
 from panel.infrastructure.vpn.client_uri import build_share_uris
 from panel.infrastructure.vpn.template_loader import find_inbound, load_template, set_client_id
 from panel.infrastructure.vpn.systemd_reload import reload_service
+from panel.infrastructure.vpn.service_ready import wait_for_service_ready
 
 
 @dataclass(slots=True)
@@ -120,6 +121,7 @@ class ProfileConfigBuilder:
             active_path.parent.mkdir(parents=True, exist_ok=True)
             atomic_write(active_path, body)
             reload_service(profile_settings.service_name)
+            wait_for_service_ready(profile_settings.service_name, profile, systemd)
 
         cert_dir = profile_settings.cert_dir
         if cert_dir is not None and result.extra_files:
@@ -138,6 +140,7 @@ class ProfileConfigBuilder:
 
         if not systemd.per_config and profile_settings.active_config_path is None:
             reload_service(profile_settings.service_name)
+            wait_for_service_ready(profile_settings.service_name, profile, systemd)
 
     def sensitive_fields(self, profile: ConfigProfile) -> list[str]:
         if profile is ConfigProfile.HYSTERIA2:

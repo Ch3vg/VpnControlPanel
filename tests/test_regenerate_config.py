@@ -172,6 +172,7 @@ async def test_regenerate_worker_creates_version_two(
 
     panel_settings.paths.configs = tmp_path
     monkeypatch.setattr("panel.infrastructure.vpn.config_builder.reload_service", lambda _service: None)
+    monkeypatch.setattr("panel.infrastructure.vpn.config_builder.wait_for_service_ready", lambda *_a, **_k: None)
 
     _, _, user_id = admin_user
     ctx = WorkerContext(

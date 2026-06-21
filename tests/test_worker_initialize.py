@@ -34,6 +34,7 @@ async def test_config_initialize_handler(
 
         panel_settings.paths.templates = templates_path_from_repo()
     monkeypatch.setattr("panel.infrastructure.vpn.config_builder.reload_service", lambda _service: None)
+    monkeypatch.setattr("panel.infrastructure.vpn.config_builder.wait_for_service_ready", lambda *_a, **_k: None)
 
     _, _, user_id = admin_user
     repo = VpnConfigRepository(db_session)

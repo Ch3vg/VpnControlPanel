@@ -84,6 +84,7 @@ def test_write_files_per_config_unit(panel_settings, tmp_path, monkeypatch) -> N
 
     monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.run_systemctl", fake_run_systemctl)
     monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.reload_service", lambda s: calls.append(("restart", s)))
+    monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.wait_for_service_ready", lambda *_a, **_k: None)
     monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.enable_service", lambda s: calls.append(("enable", s)))
 
     builder = ProfileConfigBuilder(settings)
@@ -119,14 +120,15 @@ def test_install_config_unit_skips_enable_on_regenerate(panel_settings, tmp_path
     calls: list[tuple[str, str | None]] = []
     with patch("panel.infrastructure.vpn.systemd_unit.run_systemctl", side_effect=lambda a, s=None: calls.append((a, s))):
         with patch("panel.infrastructure.vpn.systemd_unit.reload_service", side_effect=lambda s: calls.append(("restart", s))):
-            with patch("panel.infrastructure.vpn.systemd_unit.enable_service", side_effect=lambda s: calls.append(("enable", s))):
-                install_config_unit(
-                    ConfigProfile.XRAY_REALITY,
-                    config_id,
-                    config_filename="config.json",
-                    config_name="Office",
-                    settings=settings,
-                )
+            with patch("panel.infrastructure.vpn.systemd_unit.wait_for_service_ready"):
+                with patch("panel.infrastructure.vpn.systemd_unit.enable_service", side_effect=lambda s: calls.append(("enable", s))):
+                    install_config_unit(
+                        ConfigProfile.XRAY_REALITY,
+                        config_id,
+                        config_filename="config.json",
+                        config_name="Office",
+                        settings=settings,
+                    )
 
     assert ("enable", service_name) not in calls
     assert ("daemon-reload", None) in calls
@@ -160,6 +162,7 @@ def test_install_config_unit_writes_via_wrapper_on_permission_error(
     monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.write_unit_file", fake_write_unit_file)
     monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.run_systemctl", lambda *a, **k: None)
     monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.reload_service", lambda s: None)
+    monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.wait_for_service_ready", lambda *_a, **_k: None)
     monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.enable_service", lambda s: None)
 
     install_config_unit(

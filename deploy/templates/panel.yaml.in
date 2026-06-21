@@ -38,6 +38,8 @@ systemd:
   hysteria_binary: /usr/local/bin/hysteria
   xray_config_dir: /usr/local/etc/xray/configs
   hysteria_config_dir: /usr/local/etc/hysteria/configs
+  service_ready_timeout_seconds: 30
+  service_ready_settle_seconds: 2
 
 rate_limit:
   login:

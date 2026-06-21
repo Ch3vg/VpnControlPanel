@@ -15,6 +15,7 @@ from panel.infrastructure.vpn.systemd_reload import (
     run_systemctl,
     write_unit_file,
 )
+from panel.infrastructure.vpn.service_ready import wait_for_service_ready
 
 
 def config_service_name(config_id: uuid.UUID, *, prefix: str = "vpn") -> str:
@@ -99,6 +100,7 @@ def install_config_unit(
     if first_install:
         enable_service(service_name)
     reload_service(service_name)
+    wait_for_service_ready(service_name, profile, settings)
     return service_name
 
 

@@ -207,6 +207,13 @@ Sudoers (`/etc/sudoers.d/vpn-worker`, `make install-sudoers`):
 
 При **delete** конфига API останавливает сервис, удаляет unit-файл и каталог live-конфига (через `vpn-systemctl remove-unit`).
 
+После `restart` воркер ждёт, пока VPN действительно поднимется:
+
+1. `systemctl`: `active` + `SubState=running`, пауза `service_ready_settle_seconds` (по умолчанию 2 с), повторная проверка
+2. `journalctl`: строка с `started` (Xray) или `listening` (Hysteria2)
+
+Если за `service_ready_timeout_seconds` (по умолчанию 30 с) сервис не готов — задача `failed`, конфиг не переходит в `active`.
+
 Проверка:
 
 ```bash

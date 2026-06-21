@@ -32,6 +32,36 @@ case "${ACTION}" in
     /bin/systemctl daemon-reload
     exit 0
     ;;
+  wait-ready)
+    if [[ -z "${SERVICE}" || "${SERVICE}" != "${PREFIX}"* ]]; then
+      echo "Service name must start with ${PREFIX}" >&2
+      exit 1
+    fi
+    TIMEOUT="${VPN_SERVICE_READY_TIMEOUT:-30}"
+    SETTLE="${VPN_SERVICE_READY_SETTLE:-2}"
+    LOG_PATTERN="${VPN_SERVICE_READY_LOG_PATTERN:-started|listening}"
+    deadline=$((SECONDS + TIMEOUT))
+    while (( SECONDS < deadline )); do
+      if /bin/systemctl is-active --quiet "${SERVICE}"; then
+        substate="$(/bin/systemctl show -p SubState --value "${SERVICE}")"
+        if [[ "${substate}" == "running" ]]; then
+          sleep "${SETTLE}"
+          if /bin/systemctl is-active --quiet "${SERVICE}"; then
+            substate="$(/bin/systemctl show -p SubState --value "${SERVICE}")"
+            if [[ "${substate}" == "running" ]]; then
+              if journalctl -u "${SERVICE}" -n 40 --no-pager | grep -qiE "${LOG_PATTERN}"; then
+                exit 0
+              fi
+            fi
+          fi
+        fi
+      fi
+      sleep 1
+    done
+    echo "Service ${SERVICE} did not become ready within ${TIMEOUT}s" >&2
+    journalctl -u "${SERVICE}" -n 20 --no-pager >&2 || true
+    exit 1
+    ;;
   enable|disable|restart|stop|start)
     if [[ -z "${SERVICE}" || "${SERVICE}" != "${PREFIX}"* ]]; then
       echo "Service name must start with ${PREFIX}" >&2

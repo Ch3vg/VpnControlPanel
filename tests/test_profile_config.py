@@ -62,6 +62,7 @@ def test_write_files_active_config_path(panel_settings, tmp_path, monkeypatch) -
     )
     settings.paths.configs = tmp_path / "archive"
     monkeypatch.setattr("panel.infrastructure.vpn.config_builder.reload_service", lambda _s: None)
+    monkeypatch.setattr("panel.infrastructure.vpn.config_builder.wait_for_service_ready", lambda *_a, **_k: None)
 
     builder = ProfileConfigBuilder(settings)
     result = builder.build(ConfigProfile.XRAY_REALITY, name="Office")

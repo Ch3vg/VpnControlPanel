@@ -121,6 +121,8 @@ class SystemdSettings(BaseModel):
     hysteria_binary: Path = Path("/usr/local/bin/hysteria")
     xray_config_dir: Path = Path("/usr/local/etc/xray/configs")
     hysteria_config_dir: Path = Path("/usr/local/etc/hysteria/configs")
+    service_ready_timeout_seconds: int = Field(default=30, ge=5, le=120)
+    service_ready_settle_seconds: float = Field(default=2.0, ge=0, le=10)
 
 
 class VpnProfileSettings(BaseModel):
