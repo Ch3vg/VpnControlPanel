@@ -8,6 +8,18 @@ PREFIX="${VPN_SERVICE_PREFIX:-vpn-}"
 
 case "${ACTION}" in
   daemon-reload) ;;
+  write-unit)
+    if [[ -z "${SERVICE}" || "${SERVICE}" != "${PREFIX}"* ]]; then
+      echo "Service name must start with ${PREFIX}" >&2
+      exit 1
+    fi
+    UNIT_PATH="/etc/systemd/system/${SERVICE}.service"
+    TMP="$(mktemp)"
+    trap 'rm -f "${TMP}"' EXIT
+    cat > "${TMP}"
+    install -m 644 "${TMP}" "${UNIT_PATH}"
+    exit 0
+    ;;
   enable|disable|restart|stop|start)
     if [[ -z "${SERVICE}" || "${SERVICE}" != "${PREFIX}"* ]]; then
       echo "Service name must start with ${PREFIX}" >&2

@@ -278,6 +278,7 @@ curl -s -X POST http://127.0.0.1:8000/auth/login \
 | `sudo: command not allowed` / `COMMAND=reload` | В unit не в кавычках `VPN_SYSTEMCTL_CMD` → вызывается `sudo reload`. Исправьте unit, установите sudoers, см. ниже |
 | `Permission denied: panel.yaml` | Worker не в группе `vpn-panel`: `sudo usermod -aG vpn-panel vpn-worker`, каталог conf `750 root:vpn-panel`, файл `640`; `make fix-config-perms` |
 | `Permission denied: .../xray/tmp*` | Worker не может писать в каталог live-конфига Xray: `sudo make fix-config-perms` (каталог `/usr/local/etc/xray` → `770 root:vpn-panel`, конфиги `660`) |
+| `Permission denied: /etc/systemd/system/tmp*` при regenerate | Старая версия писала unit-файлы без sudo. `sudo make update` (переустановит `vpn-systemctl` с `write-unit`) |
 | `git pull` / `would be overwritten by merge` в `deploy/scripts/` | Старый `make update` менял права на скрипты. Один раз: `git checkout -- deploy/scripts/ && git pull`, затем `sudo make update` (новая версия не трогает index) |
 | `failed` при create | Права на `VCP_VPN_CONFIGS_DIR`, sudoers для systemctl |
 | nginx -t fail | Проверьте `deploy/output/nginx/vpn-panel.conf`; для SSL нужен `VCP_NGINX_SSL=1` и certbot |

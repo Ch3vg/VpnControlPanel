@@ -6,7 +6,7 @@ from pathlib import Path
 from panel.config import SystemdSettings
 from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.infrastructure.filesystem.writer import atomic_write
-from panel.infrastructure.vpn.systemd_reload import enable_service, reload_service, run_systemctl
+from panel.infrastructure.vpn.systemd_reload import enable_service, reload_service, run_systemctl, write_unit_file
 
 
 def config_service_name(config_id: uuid.UUID, *, prefix: str = "vpn") -> str:
@@ -82,7 +82,10 @@ def install_config_unit(
     )
 
     first_install = not unit_path.is_file()
-    atomic_write(unit_path, unit_content, mode=0o644)
+    try:
+        atomic_write(unit_path, unit_content, mode=0o644)
+    except PermissionError:
+        write_unit_file(service_name, unit_content)
     if first_install:
         run_systemctl("daemon-reload")
         enable_service(service_name)

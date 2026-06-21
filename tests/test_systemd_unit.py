@@ -129,3 +129,45 @@ def test_install_config_unit_skips_enable_on_regenerate(panel_settings, tmp_path
 
     assert ("enable", service_name) not in calls
     assert ("restart", service_name) in calls
+
+
+def test_install_config_unit_writes_via_wrapper_on_permission_error(
+    panel_settings, tmp_path, monkeypatch
+) -> None:
+    settings = panel_settings.systemd.model_copy(
+        update={
+            "per_config": True,
+            "unit_dir": tmp_path / "units",
+            "xray_config_dir": tmp_path / "live" / "xray",
+        },
+    )
+    config_id = uuid.uuid4()
+    service_name = config_service_name(config_id)
+    written: list[tuple[str, str]] = []
+
+    def fake_atomic_write(*args, **kwargs) -> None:
+        raise PermissionError("denied")
+
+    def fake_write_unit_file(name: str, content: str) -> None:
+        written.append((name, content))
+        unit_path = unit_file_path(name, settings)
+        unit_path.parent.mkdir(parents=True, exist_ok=True)
+        unit_path.write_text(content, encoding="utf-8")
+
+    monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.atomic_write", fake_atomic_write)
+    monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.write_unit_file", fake_write_unit_file)
+    monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.run_systemctl", lambda *a, **k: None)
+    monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.reload_service", lambda s: None)
+    monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.enable_service", lambda s: None)
+
+    install_config_unit(
+        ConfigProfile.XRAY_REALITY,
+        config_id,
+        config_filename="config.json",
+        config_name="Office",
+        settings=settings,
+    )
+
+    assert written
+    assert written[0][0] == service_name
+    assert "Description=VPN Office" in written[0][1]
