@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .PHONY: help init-env secrets render deploy deploy-deps deploy-users deploy-db install-app \
         setup-config migrate create-admin install-systemd install-sudoers install-nginx \
-        restart status logs chmod-scripts check-scripts
+        restart status logs chmod-scripts check-scripts uninstall uninstall-keep-db
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -50,6 +50,9 @@ install-systemd: chmod-scripts ## Install and start systemd units (root)
 install-sudoers: chmod-scripts ## Install worker sudoers (root)
 	sudo deploy/scripts/install-sudoers.sh
 
+fix-config-perms: chmod-scripts ## Fix panel.yaml permissions for worker (root)
+	sudo deploy/scripts/fix-config-perms.sh
+
 install-nginx: chmod-scripts ## Install nginx site config (root)
 	sudo deploy/scripts/install-nginx.sh
 
@@ -67,3 +70,9 @@ chmod-scripts: ## Mark deploy scripts executable
 
 check-scripts: chmod-scripts ## Syntax-check deploy scripts
 	@for f in deploy/scripts/*.sh; do bash -n "$$f" && echo "OK $$f"; done
+
+uninstall: chmod-scripts ## Remove panel services, configs, data (sudo; reads deploy/.env)
+	sudo deploy/scripts/uninstall.sh
+
+uninstall-keep-db: chmod-scripts ## Uninstall but keep PostgreSQL database
+	sudo deploy/scripts/uninstall.sh --keep-db

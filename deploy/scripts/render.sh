@@ -12,7 +12,13 @@ render_template "${DEPLOY_DIR}/templates/panel.yaml.in" "${OUTPUT_DIR}/panel.yam
 render_template "${DEPLOY_DIR}/templates/systemd/vpn-broker.service.in" "${OUTPUT_DIR}/systemd/vpn-broker.service"
 render_template "${DEPLOY_DIR}/templates/systemd/vpn-api.service.in" "${OUTPUT_DIR}/systemd/vpn-api.service"
 render_template "${DEPLOY_DIR}/templates/systemd/vpn-worker.service.in" "${OUTPUT_DIR}/systemd/vpn-worker.service"
-render_template "${DEPLOY_DIR}/templates/nginx/vpn-panel.conf.in" "${OUTPUT_DIR}/nginx/vpn-panel.conf"
+if [[ "${VCP_NGINX_SSL:-0}" == "1" || "${VCP_NGINX_SSL:-0}" == "true" ]]; then
+  render_template "${DEPLOY_DIR}/templates/nginx/vpn-panel.ssl.conf.in" "${OUTPUT_DIR}/nginx/vpn-panel.conf" \
+    '$VCP_PANEL_DOMAIN $VCP_API_HOST $VCP_API_PORT'
+else
+  render_template "${DEPLOY_DIR}/templates/nginx/vpn-panel.conf.in" "${OUTPUT_DIR}/nginx/vpn-panel.conf" \
+    '$VCP_PANEL_DOMAIN $VCP_API_HOST $VCP_API_PORT'
+fi
 render_template "${DEPLOY_DIR}/templates/sudoers/vpn-worker.in" "${OUTPUT_DIR}/sudoers/vpn-worker"
 
 log "All templates rendered to ${OUTPUT_DIR}/"

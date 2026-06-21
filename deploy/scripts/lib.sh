@@ -54,8 +54,13 @@ venv_bin() {
 render_template() {
   local template="$1"
   local output="$2"
+  local envsubst_vars="${3:-}"
   mkdir -p "$(dirname "${output}")"
-  envsubst < "${template}" > "${output}"
+  if [[ -n "${envsubst_vars}" ]]; then
+    envsubst "${envsubst_vars}" < "${template}" > "${output}"
+  else
+    envsubst < "${template}" > "${output}"
+  fi
   log "Rendered $(basename "${output}")"
 }
 

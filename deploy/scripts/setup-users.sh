@@ -15,6 +15,10 @@ if ! id "${VCP_WORKER_USER}" &>/dev/null; then
   log "Created user ${VCP_WORKER_USER}"
 fi
 
+# Worker must read panel.yaml (group-readable, owned root:vpn-panel).
+usermod -aG "${VCP_PANEL_USER}" "${VCP_WORKER_USER}"
+log "Added ${VCP_WORKER_USER} to group ${VCP_PANEL_USER}"
+
 mkdir -p "${VCP_CONFIG_DIR}" "${VCP_DATA_DIR}" "${VCP_VPN_CONFIGS_DIR}" "${VCP_CERT_DIR}" "${VCP_INSTALL_DIR}"
 chown "${VCP_PANEL_USER}:${VCP_PANEL_USER}" "${VCP_DATA_DIR}"
 chown "${VCP_WORKER_USER}:${VCP_WORKER_USER}" "${VCP_VPN_CONFIGS_DIR}" "${VCP_CERT_DIR}"

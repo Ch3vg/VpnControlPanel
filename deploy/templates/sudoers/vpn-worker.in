@@ -1,6 +1,6 @@
-# Allow worker to reload VPN services without password
-${VCP_WORKER_USER} ALL=(root) NOPASSWD: /bin/systemctl reload xray_reality
-${VCP_WORKER_USER} ALL=(root) NOPASSWD: /bin/systemctl reload xray_grpc
-${VCP_WORKER_USER} ALL=(root) NOPASSWD: /bin/systemctl reload xray_xhttp
-${VCP_WORKER_USER} ALL=(root) NOPASSWD: /bin/systemctl reload xray_client
-${VCP_WORKER_USER} ALL=(root) NOPASSWD: /bin/systemctl reload hysteria-server
+# Allow worker to restart VPN services without password (Xray/Hysteria2 do not support reload)
+${VCP_WORKER_USER} ALL=(root) NOPASSWD: /bin/systemctl restart xray_reality
+${VCP_WORKER_USER} ALL=(root) NOPASSWD: /bin/systemctl restart xray_grpc
+${VCP_WORKER_USER} ALL=(root) NOPASSWD: /bin/systemctl restart xray_xhttp
+${VCP_WORKER_USER} ALL=(root) NOPASSWD: /bin/systemctl restart xray_client
+${VCP_WORKER_USER} ALL=(root) NOPASSWD: /bin/systemctl restart hysteria-server

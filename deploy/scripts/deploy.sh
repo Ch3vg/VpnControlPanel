@@ -49,6 +49,7 @@ if [[ "${SKIP_ADMIN}" -eq 0 ]]; then
 fi
 
 bash "${SCRIPT_DIR}/install-sudoers.sh"
+bash "${SCRIPT_DIR}/fix-config-perms.sh"
 bash "${SCRIPT_DIR}/install-systemd.sh"
 
 if [[ "${SKIP_NGINX}" -eq 0 ]]; then
@@ -56,5 +57,8 @@ if [[ "${SKIP_NGINX}" -eq 0 ]]; then
 fi
 
 log "Deploy complete"
-log "Admin UI: https://${VCP_PANEL_DOMAIN}/admin"
+log "Admin UI: http://${VCP_PANEL_DOMAIN}/admin"
+if [[ "${VCP_NGINX_SSL:-0}" == "1" || "${VCP_NGINX_SSL:-0}" == "true" ]]; then
+  log "Admin UI (TLS): https://${VCP_PANEL_DOMAIN}/admin"
+fi
 log "Check: systemctl status vpn-broker vpn-api vpn-worker"
