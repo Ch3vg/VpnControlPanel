@@ -275,15 +275,14 @@ Append-only. События `share.accessed` не пишутся на кажды
 |-------|------|------|----------|
 | POST | `/api/v1/configs/{id}/share` | JWT | Создать ссылку |
 | DELETE | `/api/v1/share/{token}` | JWT | Отозвать |
-| GET | `/share/{token}` | — | Публичный: список client URI |
+| GET | `/share/{token}` | — | Публичный: client URI (`text/plain`, по одной ссылке на строку) |
 
-Пример ответа `/share/{token}`:
+Пример ответа `/share/{token}` (`Content-Type: text/plain`):
 
-```json
-[
-  "vless://...@...",
-  "hysteria2://...@..."
-]
+```
+vless://...@host:8444?type=tcp&security=reality&flow=xtls-rprx-vision&fp=chrome&pbk=...&sid=...&sni=...&fragment=true#Reality-Dynamic
+vless://...@host:81?type=xhttp&security=none&host=...&path=/download&mode=packet-up#XHTTP-Dynamic
+hysteria2://...@host:443?sni=...&pinSHA256=...&insecure=0#Hysteria2-Dynamic
 ```
 
 ---

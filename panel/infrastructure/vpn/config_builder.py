@@ -14,6 +14,7 @@ from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.infrastructure.filesystem.writer import atomic_write
 from panel.infrastructure.vpn.crypto_utils import generate_self_signed_cert, to_base64
 from panel.infrastructure.vpn.port_picker import pick_port
+from panel.infrastructure.vpn.client_uri import build_share_uris
 from panel.infrastructure.vpn.template_loader import find_inbound, load_template, set_client_id
 from panel.infrastructure.vpn.systemd_reload import reload_service
 
@@ -130,53 +131,18 @@ class ProfileConfigBuilder:
         config_data: dict[str, Any],
         *,
         public_key: str,
-        label: str,
+        cert_fingerprint: str = "",
+        label: str = "",
     ) -> list[str]:
-        from urllib.parse import quote
-
-        host = self._settings.vpn.public_host
-        name = quote(label or "vpn")
-
-        if profile is ConfigProfile.HYSTERIA2:
-            listen = config_data["listen"]
-            port = int(str(listen).lstrip(":"))
-            password = config_data["auth"]["password"]
-            return [f"hysteria2://{quote(password, safe='')}@{host}:{port}?insecure=1#{name}"]
-
-        inbound_tag = self._settings.vpn.profiles[profile.value].inbound_tag
-        inbound = find_inbound(config_data, inbound_tag)
-        port = inbound["port"]
-
-        if profile is ConfigProfile.XRAY_REALITY:
-            client_id = inbound["settings"]["clients"][0]["id"]
-            short_id = inbound["streamSettings"]["realitySettings"]["shortIds"][0]
-            flow = inbound["settings"]["clients"][0].get("flow", "")
-            flow_q = f"&flow={flow}" if flow else ""
-            return [
-                f"vless://{client_id}@{host}:{port}"
-                f"?encryption=none&security=reality&type=tcp{flow_q}"
-                f"&pbk={quote(public_key, safe='')}&sid={short_id}#{name}"
-            ]
-
-        if profile is ConfigProfile.XRAY_GRPC:
-            client_id = inbound["settings"]["clients"][0]["id"]
-            sni = inbound["streamSettings"]["tlsSettings"].get("serverName", host)
-            service = inbound["streamSettings"]["grpcSettings"].get("serviceName", "")
-            return [
-                f"vless://{client_id}@{host}:{port}"
-                f"?encryption=none&security=tls&type=grpc&sni={quote(sni)}&serviceName={quote(service)}#{name}"
-            ]
-
-        if profile is ConfigProfile.XRAY_XHTTP:
-            client_id = inbound["settings"]["clients"][0]["id"]
-            xhttp = inbound["streamSettings"]["xhttpSettings"]
-            return [
-                f"vless://{client_id}@{host}:{port}"
-                f"?encryption=none&security=none&type=xhttp"
-                f"&host={quote(xhttp['host'])}&path={quote(xhttp['path'])}#{name}"
-            ]
-
-        return []
+        profile_settings = self._settings.vpn.profiles[profile.value]
+        return build_share_uris(
+            profile,
+            config_data,
+            host=self._settings.vpn.public_host,
+            public_key=public_key,
+            cert_fingerprint=cert_fingerprint,
+            inbound_tag=profile_settings.inbound_tag,
+        )
 
     def _resolve_template_path(self, template_file: str) -> Path:
         path = Path(template_file)

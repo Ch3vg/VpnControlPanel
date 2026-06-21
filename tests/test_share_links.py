@@ -142,10 +142,15 @@ async def test_resolve_share_returns_uris(
     response = await api_client.get(f"/share/{raw_token}")
     assert response.status_code == 200
     assert response.headers.get("cache-control") == "no-store"
-    uris = response.json()
+    assert "text/plain" in response.headers.get("content-type", "")
+    uris = [line for line in response.text.splitlines() if line.strip()]
     assert len(uris) == 1
     assert uris[0].startswith("vless://")
+    assert "type=tcp" in uris[0]
+    assert "security=reality" in uris[0]
+    assert "encryption=none" not in uris[0]
     assert "10443" in uris[0]
+    assert uris[0].endswith("#Reality-Dynamic")
 
     async with create_session_factory(db_engine)() as session:
         result = await session.execute(select(ShareTokenModel))
@@ -260,7 +265,7 @@ async def test_share_pins_config_version(
         await session.commit()
 
     response = await api_client.get(f"/share/{raw_token}")
-    uris = response.json()
+    uris = [line for line in response.text.splitlines() if line.strip()]
     assert "10443" in uris[0]
     assert "20443" not in uris[0]
 

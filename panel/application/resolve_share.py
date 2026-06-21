@@ -74,6 +74,7 @@ class ResolveShareUseCase:
             snapshot.profile,
             config_plain,
             public_key=snapshot.public_key,
+            cert_fingerprint=snapshot.cert_fingerprint,
             label=snapshot.name,
         )
 

@@ -73,3 +73,23 @@ update_env_var() {
     echo "${key}=${value}" >> "${ENV_FILE}"
   fi
 }
+
+# Live VPN config dirs (active_config_path targets) must allow vpn-worker (group vpn-panel)
+# to create temp files and atomically replace configs.
+fix_vpn_live_dirs() {
+  local cert_dir xray_dir hysteria_dir
+  cert_dir="${VCP_CERT_DIR:-/usr/local/etc/xray/certs}"
+  xray_dir="$(dirname "${cert_dir}")"
+  hysteria_dir="${VCP_HYSTERIA_CONFIG_DIR:-/usr/local/etc/hysteria}"
+
+  install -d -m 770 -o root -g "${VCP_PANEL_USER}" "${xray_dir}" "${hysteria_dir}" "${cert_dir}"
+
+  find "${xray_dir}" -maxdepth 1 -type f \( -name '*.json' -o -name '*.yaml' \) \
+    -exec chown root:"${VCP_PANEL_USER}" {} \; -exec chmod 660 {} \; 2>/dev/null || true
+
+  find "${hysteria_dir}" -maxdepth 1 -type f -name '*.yaml' \
+    -exec chown root:"${VCP_PANEL_USER}" {} \; -exec chmod 660 {} \; 2>/dev/null || true
+
+  find "${cert_dir}" -type f -exec chown root:"${VCP_PANEL_USER}" {} \; -exec chmod 640 {} \; 2>/dev/null || true
+  find "${cert_dir}" -type l -exec chown -h root:"${VCP_PANEL_USER}" {} \; 2>/dev/null || true
+}

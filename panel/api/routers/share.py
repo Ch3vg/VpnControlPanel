@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +17,7 @@ admin_router = APIRouter(prefix="/api/v1/share", tags=["share"])
 _SHARE_NOT_FOUND = "Not found"
 
 
-@public_router.get("/{token:path}", response_model=list[str])
+@public_router.get("/{token:path}")
 async def resolve_share(
     token: str,
     request: Request,
@@ -47,9 +45,12 @@ async def resolve_share(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_SHARE_NOT_FOUND) from None
 
     await session.commit()
+    body = "\n".join(uris)
+    if body:
+        body += "\n"
     return Response(
-        content=json.dumps(uris),
-        media_type="application/json",
+        content=body,
+        media_type="text/plain; charset=utf-8",
         headers={"Cache-Control": "no-store"},
     )
 

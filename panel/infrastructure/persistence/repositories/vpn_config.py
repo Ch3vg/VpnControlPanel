@@ -65,6 +65,7 @@ class ConfigVersionSnapshot:
     version: int
     port: int
     public_key: str
+    cert_fingerprint: str
     config_data: dict
 
 
@@ -297,6 +298,7 @@ class VpnConfigRepository:
             version=version_model.version,
             port=version_model.port,
             public_key=version_model.public_key,
+            cert_fingerprint=version_model.cert_fingerprint,
             config_data=dict(version_model.config_data),
         )
 
