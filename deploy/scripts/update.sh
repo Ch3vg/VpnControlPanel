@@ -30,6 +30,8 @@ load_env
 log "Updating VPN Control Panel at ${VCP_INSTALL_DIR}"
 
 if [[ "${NO_PULL}" -eq 0 && -d "${VCP_INSTALL_DIR}/.git" ]]; then
+  # Legacy make targets ran `chmod +x deploy/scripts/*.sh`, which dirties the index on Linux.
+  git -C "${VCP_INSTALL_DIR}" checkout -- deploy/scripts/ 2>/dev/null || true
   git -C "${VCP_INSTALL_DIR}" pull --ff-only
 fi
 

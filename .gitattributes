@@ -1,0 +1,4 @@
+# Keep shell scripts LF in the repo; avoid false diffs on Linux servers.
+*.sh text eol=lf
+
+deploy/scripts/*.sh text eol=lf

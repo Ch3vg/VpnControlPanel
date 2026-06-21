@@ -11,50 +11,50 @@ init-env: ## Copy deploy/env.example → deploy/.env
 	cp deploy/env.example deploy/.env
 	@echo "Edit deploy/.env (VCP_TASK_BROKER_WHL, domains, paths)"
 
-secrets: chmod-scripts ## Generate secrets in deploy/.env
-	deploy/scripts/generate-secrets.sh
+secrets: ## Generate secrets in deploy/.env
+	bash deploy/scripts/generate-secrets.sh
 
-render: chmod-scripts ## Render templates → deploy/output/
-	deploy/scripts/render.sh
+render: ## Render templates → deploy/output/
+	bash deploy/scripts/render.sh
 
-deploy: chmod-scripts ## Full production deploy (sudo)
-	sudo deploy/scripts/deploy.sh
+deploy: ## Full production deploy (sudo)
+	sudo bash deploy/scripts/deploy.sh
 
-deploy-quick: chmod-scripts ## Deploy without apt/nginx/admin prompts
-	sudo deploy/scripts/deploy.sh --skip-deps --skip-nginx --skip-admin
+deploy-quick: ## Deploy without apt/nginx/admin prompts
+	sudo bash deploy/scripts/deploy.sh --skip-deps --skip-nginx --skip-admin
 
-deploy-deps: chmod-scripts ## Install apt packages (root)
-	sudo deploy/scripts/install-deps.sh
+deploy-deps: ## Install apt packages (root)
+	sudo bash deploy/scripts/install-deps.sh
 
-deploy-users: chmod-scripts ## Create OS users and directories (root)
-	sudo deploy/scripts/setup-users.sh
+deploy-users: ## Create OS users and directories (root)
+	sudo bash deploy/scripts/setup-users.sh
 
-deploy-db: chmod-scripts ## Create PostgreSQL role and database (root)
-	sudo deploy/scripts/setup-postgres.sh
+deploy-db: ## Create PostgreSQL role and database (root)
+	sudo bash deploy/scripts/setup-postgres.sh
 
-install-app: chmod-scripts ## Install venv + pip packages (root)
-	sudo deploy/scripts/install-app.sh
+install-app: ## Install venv + pip packages (root)
+	sudo bash deploy/scripts/install-app.sh
 
-setup-config: chmod-scripts ## Render and install panel.yaml / broker.yaml (root)
-	sudo deploy/scripts/setup-config.sh
+setup-config: ## Render and install panel.yaml / broker.yaml (root)
+	sudo bash deploy/scripts/setup-config.sh
 
-migrate: chmod-scripts ## Run alembic upgrade head (root)
-	sudo deploy/scripts/migrate.sh
+migrate: ## Run alembic upgrade head (root)
+	sudo bash deploy/scripts/migrate.sh
 
-create-admin: chmod-scripts ## Create first admin user (root)
-	sudo deploy/scripts/create-admin.sh
+create-admin: ## Create first admin user (root)
+	sudo bash deploy/scripts/create-admin.sh
 
-install-systemd: chmod-scripts ## Install and start systemd units (root)
-	sudo deploy/scripts/install-systemd.sh
+install-systemd: ## Install and start systemd units (root)
+	sudo bash deploy/scripts/install-systemd.sh
 
-install-sudoers: chmod-scripts ## Install worker sudoers (root)
-	sudo deploy/scripts/install-sudoers.sh
+install-sudoers: ## Install worker sudoers (root)
+	sudo bash deploy/scripts/install-sudoers.sh
 
-fix-config-perms: chmod-scripts ## Fix panel.yaml permissions for worker (root)
-	sudo deploy/scripts/fix-config-perms.sh
+fix-config-perms: ## Fix panel.yaml permissions for worker (root)
+	sudo bash deploy/scripts/fix-config-perms.sh
 
-install-nginx: chmod-scripts ## Install nginx site config (root)
-	sudo deploy/scripts/install-nginx.sh
+install-nginx: ## Install nginx site config (root)
+	sudo bash deploy/scripts/install-nginx.sh
 
 restart: ## Restart all panel services
 	sudo systemctl restart vpn-broker vpn-api vpn-worker
@@ -65,20 +65,20 @@ status: ## Show service status
 logs: ## Tail service logs
 	sudo journalctl -u vpn-api -u vpn-worker -u vpn-broker -f
 
-chmod-scripts: ## Mark deploy scripts executable
+chmod-scripts: ## Mark deploy scripts executable (local dev only; not used on server)
 	chmod +x deploy/scripts/*.sh
 
-check-scripts: chmod-scripts ## Syntax-check deploy scripts
+check-scripts: ## Syntax-check deploy scripts
 	@for f in deploy/scripts/*.sh; do bash -n "$$f" && echo "OK $$f"; done
 
-uninstall: chmod-scripts ## Remove panel services, configs, data (sudo; reads deploy/.env)
-	sudo deploy/scripts/uninstall.sh
+uninstall: ## Remove panel services, configs, data (sudo; reads deploy/.env)
+	sudo bash deploy/scripts/uninstall.sh
 
-uninstall-keep-db: chmod-scripts ## Uninstall but keep PostgreSQL database
-	sudo deploy/scripts/uninstall.sh --keep-db
+uninstall-keep-db: ## Uninstall but keep PostgreSQL database
+	sudo bash deploy/scripts/uninstall.sh --keep-db
 
-update: chmod-scripts ## Apply updates after git pull (sudo)
-	sudo deploy/scripts/update.sh
+update: ## Apply updates after git pull (sudo)
+	sudo bash deploy/scripts/update.sh
 
-update-quick: chmod-scripts ## Update without git pull / nginx
-	sudo deploy/scripts/update.sh --no-pull --skip-nginx
+update-quick: ## Update without git pull / nginx
+	sudo bash deploy/scripts/update.sh --no-pull --skip-nginx
