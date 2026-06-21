@@ -1,0 +1,94 @@
+app:
+  name: vpn-control-panel
+  max_secure: false
+  environment: development
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+
+database:
+  url: "postgresql+asyncpg://user:pass@localhost/panel"
+
+security:
+  secret_key: "replace-with-at-least-32-char-jwt-secret-key"
+  encryption_key: "replace-with-at-least-32-char-db-encryption-key"
+  jwt_algorithm: HS256
+  jwt_expire_minutes: 60
+
+broker:
+  url: "http://127.0.0.1:8001"
+  api_key: "replace-with-at-least-32-char-secret-key"
+
+worker:
+  worker_id: "panel-worker-1"
+  task_types:
+    - config.initialize
+    - config.regenerate
+
+paths:
+  configs: "/opt/vpn/configs"
+  templates: "configs"
+
+rate_limit:
+  login:
+    max_attempts: 5
+    window_seconds: 900
+  share:
+    max_requests: 30
+    window_seconds: 60
+
+audit:
+  enabled: true
+  log_failed_login: true
+
+metrics:
+  enabled: true
+
+security_headers:
+  enabled: true
+
+vpn:
+  public_host: "vpn.example.com"
+  profiles:
+    xray-reality:
+      template_file: config_reality.json
+      service_name: xray_reality
+      config_filename: config.json
+      inbound_tag: vless-reality-in
+      port_candidates: [443, 8443, 2053, 2083, 2096, 9443, 10443, 8444]
+    xray-grpc:
+      template_file: config_grpc.json
+      service_name: xray_grpc
+      config_filename: config.json
+      inbound_tag: vless-grpc-trusted
+      port_candidates: [8443, 2053, 2083, 2096, 9443, 10443, 4433, 8444]
+      cert_dir: /usr/local/etc/xray/certs
+      cert_prefix: grpc
+    xray-xhttp:
+      template_file: config_xhttp.json
+      service_name: xray_xhttp
+      config_filename: config.json
+      inbound_tag: vless-xhttp-in
+      port_candidates: [80, 8080, 8000, 8888, 8081, 8090, 3000, 5000, 9000]
+      xhttp_hosts: [yandex.ru, gosuslugi.ru, kremlin.ru, rzd.ru]
+      xhttp_paths: [/search, /assets, /api, /download, /news, /login]
+    xray-client-in:
+      template_file: config_client_in.json
+      service_name: xray_client
+      config_filename: config.json
+      inbound_tag: client-in
+      port_candidates: [51820]
+    hysteria2:
+      template_file: hysteria.server.yaml
+      service_name: hysteria-server
+      config_filename: config.yaml
+      inbound_tag: ""
+      port_candidates: [443, 8443, 3478, 8800, 1935, 8000, 8080, 53, 123, 5000]
+      cert_dir: /usr/local/etc/xray/certs
+      cert_prefix: hysteria
+
+telegram:
+  enabled: false
+  bot_token: ""
+  chat_id: ""

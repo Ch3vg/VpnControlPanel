@@ -1,0 +1,15 @@
+auth:
+  type: password
+  password: placeholder
+listen: :443
+log:
+  level: debug
+outbounds:
+  - name: xray-socks
+    type: socks5
+    socks5:
+      addr: 127.0.0.1:51820
+speedLimit: 0
+tls:
+  cert: /usr/local/etc/xray/certs/hysteria-cert.pem
+  key: /usr/local/etc/xray/certs/hysteria-key.pem

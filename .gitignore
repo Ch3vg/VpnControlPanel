@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+
+# Local config and secrets
+broker.yaml
+panel.yaml
+.env
+.env.*
+*.local.yaml
+data/
+*.db
+
+# task-broker wheel (install locally, not committed)
+vendor/
+*.whl
+
+# IDE / OS
+.idea/
+.vscode/
+.cursor/
+Thumbs.db
+.DS_Store
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/

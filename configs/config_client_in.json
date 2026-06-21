@@ -1,0 +1,157 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "tag": "client-in",
+      "listen": "127.0.0.1",
+      "port": 51820,
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": true
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls"
+        ]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "direct-out",
+      "protocol": "freedom"
+    },
+    {
+      "tag": "ss-out",
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "127.0.0.1",
+            "port": 1080
+          }
+        ]
+      }
+    },
+    {
+      "tag": "reality-out",
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "127.0.0.1",
+            "port": 1081
+          }
+        ]
+      }
+    },
+    {
+      "tag": "xhttp-out",
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "127.0.0.1",
+            "port": 1082
+          }
+        ]
+      }
+    },
+    {
+      "tag": "grpc-out",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "203.0.113.1",
+            "port": 8443,
+            "users": [
+              {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "grpc",
+        "security": "tls",
+        "grpcSettings": {
+          "serviceName": ""
+        },
+        "tlsSettings": {
+          "fingerprint": "firefox",
+          "serverName": "localhost",
+          "pinnedPeerCertSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "fragment": true
+        },
+        "tcpSettings": {
+          "tcpFastOpen": true
+        }
+      }
+    }
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "balancers": [
+      {
+        "tag": "vpn-balancer",
+        "selector": [
+          "ss-out",
+          "reality-out",
+          "xhttp-out",
+          "grpc-out"
+        ],
+        "strategy": {
+          "type": "random"
+        }
+      }
+    ],
+    "rules": [
+      {
+        "type": "field",
+        "domain": [
+          "geosite:ru-available-only-inside",
+          "regexp:.*\\.ru$",
+          "regexp:.*\\.su$"
+        ],
+        "outboundTag": "direct-out"
+      },
+      {
+        "type": "field",
+        "ip": [
+          "geoip:ru-whitelist"
+        ],
+        "outboundTag": "direct-out"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "geosite:ru-blocked",
+          "geosite:ru-blocked-all"
+        ],
+        "balancerTag": "vpn-balancer"
+      },
+      {
+        "type": "field",
+        "ip": [
+          "geoip:ru-blocked"
+        ],
+        "balancerTag": "vpn-balancer"
+      },
+      {
+        "type": "field",
+        "inboundTag": [
+          "client-in"
+        ],
+        "balancerTag": "vpn-balancer"
+      }
+    ]
+  }
+}

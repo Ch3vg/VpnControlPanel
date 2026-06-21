@@ -1,0 +1,19 @@
+server:
+  host: "127.0.0.1"
+  port: 8001
+
+database:
+  dsn: "sqlite+aiosqlite:///./data/broker.db"
+
+queue:
+  default_lock_ttl_seconds: 180
+  default_max_retries: 3
+  retry_delay_seconds: 10
+  default_pull_timeout_seconds: 30
+  pull_interval_seconds: 1
+
+security:
+  api_key: "replace-with-at-least-32-char-secret-key"
+
+logging:
+  level: INFO
