@@ -1,0 +1,16 @@
+[Unit]
+Description=VPN Control Panel Task Broker
+After=network.target
+
+[Service]
+Type=simple
+User=${VCP_PANEL_USER}
+Group=${VCP_PANEL_USER}
+WorkingDirectory=${VCP_INSTALL_DIR}
+Environment=BROKER_CONFIG_PATH=${VCP_CONFIG_DIR}/broker.yaml
+ExecStart=${VCP_INSTALL_DIR}/.venv/bin/vpn-broker
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

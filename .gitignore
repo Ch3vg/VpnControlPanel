@@ -13,6 +13,8 @@ broker.yaml
 panel.yaml
 .env
 .env.*
+deploy/.env
+deploy/output/
 *.local.yaml
 data/
 *.db

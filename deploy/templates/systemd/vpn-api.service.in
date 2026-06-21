@@ -1,0 +1,17 @@
+[Unit]
+Description=VPN Control Panel API
+After=network.target postgresql.service vpn-broker.service
+Requires=vpn-broker.service
+
+[Service]
+Type=simple
+User=${VCP_PANEL_USER}
+Group=${VCP_PANEL_USER}
+WorkingDirectory=${VCP_INSTALL_DIR}
+Environment=PANEL_CONFIG_PATH=${VCP_CONFIG_DIR}/panel.yaml
+ExecStart=${VCP_INSTALL_DIR}/.venv/bin/vpn-api
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

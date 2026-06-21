@@ -1,0 +1,19 @@
+server:
+  host: "${VCP_BROKER_HOST}"
+  port: ${VCP_BROKER_PORT}
+
+database:
+  dsn: "sqlite+aiosqlite:////${VCP_DATA_DIR}/broker.db"
+
+queue:
+  default_lock_ttl_seconds: 300
+  default_max_retries: 3
+  retry_delay_seconds: 10
+  default_pull_timeout_seconds: 30
+  pull_interval_seconds: 1
+
+security:
+  api_key: "${VCP_BROKER_API_KEY}"
+
+logging:
+  level: INFO

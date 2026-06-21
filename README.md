@@ -92,6 +92,9 @@ VpnControlPanel/
 │   └── config.py                 # загрузка panel.yaml
 │
 ├── configs/                      # шаблоны Xray/Hysteria2 (см. configs/README.md)
+├── deploy/                       # production-деплой (шаблоны, scripts, Makefile)
+├── docs/
+│   └── DEPLOY.md                 # инструкция по деплою
 ├── panel.yaml.example
 │
 ├── alembic/
@@ -521,6 +524,18 @@ telegram:
 ```
 
 Панель **не читает** `broker.yaml`. Брокер **не знает** о панели.
+
+---
+
+## Деплой (production)
+
+Полная инструкция: **[docs/DEPLOY.md](docs/DEPLOY.md)**
+
+```bash
+make init-env    # cp deploy/env.example deploy/.env
+# задайте VCP_TASK_BROKER_WHL и домены
+make deploy      # sudo, Debian/Ubuntu
+```
 
 ---
 
