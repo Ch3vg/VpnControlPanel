@@ -212,7 +212,7 @@ Sudoers (`/etc/sudoers.d/vpn-worker`, `make install-sudoers`):
 1. `systemctl`: `active` + `SubState=running`, пауза `service_ready_settle_seconds` (по умолчанию 2 с), повторная проверка
 2. `journalctl`: строка с `started` (Xray) или `listening` (Hysteria2)
 
-Если за `service_ready_timeout_seconds` (по умолчанию 30 с) сервис не готов — задача `failed`, конфиг не переходит в `active`.
+Если за `service_ready_timeout_seconds` (по умолчанию 30 с) сервис не готов — воркер повторяет проверку (heartbeat продлевает lock задачи) до `service_ready_max_wait_seconds` (по умолчанию **10 минут**). При падении systemd (`failed`, exit-code) — сразу `failed`. Если за 10 минут так и не готов — `failed`, конфиг не переходит в `active`.
 
 Проверка:
 

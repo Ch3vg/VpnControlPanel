@@ -17,6 +17,8 @@ _STARTUP_PATTERNS: dict[ConfigProfile, re.Pattern[str]] = {
     ConfigProfile.HYSTERIA2: re.compile(r"listening|server up|started", re.IGNORECASE),
 }
 
+_FAILED_RESULTS = frozenset({"exit-code", "signal", "core-dump", "timeout"})
+
 
 class ServiceNotReadyError(RuntimeError):
     pass
@@ -60,6 +62,22 @@ def _journal_has_startup_marker(service_name: str, profile: ConfigProfile) -> bo
     return pattern.search(log) is not None
 
 
+def _systemd_show(service_name: str) -> dict[str, str]:
+    result = subprocess.run(
+        ["systemctl", "show", service_name, "-p", "ActiveState", "-p", "SubState", "-p", "Result"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    props: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            props[key] = value
+    return props
+
+
 def _systemd_running(service_name: str) -> bool:
     active = subprocess.run(
         ["systemctl", "is-active", service_name],
@@ -80,23 +98,51 @@ def _systemd_running(service_name: str) -> bool:
     return state.stdout.strip() == "running"
 
 
-def _wait_direct(service_name: str, profile: ConfigProfile, settings: SystemdSettings) -> None:
-    deadline = time.monotonic() + settings.service_ready_timeout_seconds
-    while time.monotonic() < deadline:
-        if _systemd_running(service_name):
-            time.sleep(settings.service_ready_settle_seconds)
-            if _systemd_running(service_name) and _journal_has_startup_marker(service_name, profile):
-                return
-        time.sleep(1)
+def _systemd_start_failed(service_name: str) -> bool:
+    failed = subprocess.run(
+        ["systemctl", "is-failed", service_name],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if failed.stdout.strip() == "failed":
+        return True
 
+    props = _systemd_show(service_name)
+    active_state = props.get("ActiveState", "")
+    if active_state == "failed":
+        return True
+    if active_state in ("activating", "active", "reloading"):
+        return False
+
+    result = props.get("Result", "")
+    return result in _FAILED_RESULTS
+
+
+def _raise_service_failed(service_name: str) -> None:
     log_tail = _run_journalctl(service_name, lines=20)
     raise ServiceNotReadyError(
-        f"Service {service_name} did not become ready within "
-        f"{settings.service_ready_timeout_seconds}s. Recent log:\n{log_tail}",
+        f"Service {service_name} failed during startup. Recent log:\n{log_tail}",
     )
 
 
-def _wait_via_wrapper(service_name: str, profile: ConfigProfile, settings: SystemdSettings) -> None:
+def _wait_direct_once(service_name: str, profile: ConfigProfile, settings: SystemdSettings) -> bool:
+    deadline = time.monotonic() + settings.service_ready_timeout_seconds
+    while time.monotonic() < deadline:
+        if _systemd_start_failed(service_name):
+            _raise_service_failed(service_name)
+        if _systemd_running(service_name):
+            time.sleep(settings.service_ready_settle_seconds)
+            if _systemd_start_failed(service_name):
+                _raise_service_failed(service_name)
+            if _systemd_running(service_name) and _journal_has_startup_marker(service_name, profile):
+                return True
+        time.sleep(1)
+    return False
+
+
+def _wait_via_wrapper_once(service_name: str, profile: ConfigProfile, settings: SystemdSettings) -> None:
     env = os.environ.copy()
     env["VPN_SERVICE_READY_TIMEOUT"] = str(settings.service_ready_timeout_seconds)
     env["VPN_SERVICE_READY_SETTLE"] = str(settings.service_ready_settle_seconds)
@@ -111,9 +157,12 @@ def _wait_via_wrapper(service_name: str, profile: ConfigProfile, settings: Syste
         env=env,
     )
     if result.returncode != 0:
+        if _systemd_start_failed(service_name):
+            _raise_service_failed(service_name)
         detail = (result.stderr or result.stdout or "").strip()
         raise ServiceNotReadyError(
-            f"Service {service_name} did not become ready: {detail or 'wait-ready failed'}",
+            f"Service {service_name} not ready after "
+            f"{settings.service_ready_timeout_seconds}s: {detail or 'wait-ready failed'}",
         )
 
 
@@ -122,7 +171,36 @@ def wait_for_service_ready(
     profile: ConfigProfile,
     settings: SystemdSettings,
 ) -> None:
-    if _uses_vpn_systemctl_wrapper() and _service_managed_by_wrapper(service_name, settings):
-        _wait_via_wrapper(service_name, profile, settings)
-    else:
-        _wait_direct(service_name, profile, settings)
+    max_deadline = time.monotonic() + settings.service_ready_max_wait_seconds
+    use_wrapper = _uses_vpn_systemctl_wrapper() and _service_managed_by_wrapper(service_name, settings)
+    last_detail = ""
+
+    while time.monotonic() < max_deadline:
+        if _systemd_start_failed(service_name):
+            _raise_service_failed(service_name)
+
+        try:
+            if use_wrapper:
+                _wait_via_wrapper_once(service_name, profile, settings)
+                return
+            if _wait_direct_once(service_name, profile, settings):
+                return
+            last_detail = f"not ready after {settings.service_ready_timeout_seconds}s chunk"
+        except ServiceNotReadyError as exc:
+            if _systemd_start_failed(service_name):
+                raise
+            last_detail = str(exc)
+            if time.monotonic() >= max_deadline:
+                raise
+            continue
+
+        if time.monotonic() >= max_deadline:
+            break
+
+    log_tail = _run_journalctl(service_name, lines=20)
+    raise ServiceNotReadyError(
+        f"Service {service_name} did not become ready within "
+        f"{settings.service_ready_max_wait_seconds}s "
+        f"({settings.service_ready_timeout_seconds}s per attempt). "
+        f"{last_detail}. Recent log:\n{log_tail}",
+    )

@@ -40,6 +40,7 @@ systemd:
   hysteria_config_dir: /usr/local/etc/hysteria/configs
   service_ready_timeout_seconds: 30
   service_ready_settle_seconds: 2
+  service_ready_max_wait_seconds: 600
 
 rate_limit:
   login:

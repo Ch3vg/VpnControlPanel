@@ -123,6 +123,7 @@ class SystemdSettings(BaseModel):
     hysteria_config_dir: Path = Path("/usr/local/etc/hysteria/configs")
     service_ready_timeout_seconds: int = Field(default=30, ge=5, le=120)
     service_ready_settle_seconds: float = Field(default=2.0, ge=0, le=10)
+    service_ready_max_wait_seconds: int = Field(default=600, ge=30, le=3600)
 
 
 class VpnProfileSettings(BaseModel):
