@@ -15,6 +15,7 @@ from fastapi.openapi.utils import get_openapi
 from panel.api.deps import get_current_user
 from panel.api.middleware.security_headers import SecurityHeadersMiddleware
 from panel.api.routers import auth, configs, health, metrics, share
+from panel.api.web import setup_web_ui
 from panel.config import PanelSettings, load_panel_settings
 from panel.infrastructure.logging import configure_logging
 from panel.infrastructure.observability.metrics import PrometheusMiddleware
@@ -38,7 +39,7 @@ def create_app(settings: PanelSettings, *, with_db: bool = True) -> FastAPI:
 
     app = FastAPI(
         title=settings.app.name,
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,
@@ -72,9 +73,11 @@ def create_app(settings: PanelSettings, *, with_db: bool = True) -> FastAPI:
         async def openapi() -> dict:
             return get_openapi(
                 title=settings.app.name,
-                version="0.1.0",
+                version="0.2.0",
                 routes=app.routes,
             )
+
+    setup_web_ui(app, settings)
 
     return app
 

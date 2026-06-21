@@ -48,6 +48,10 @@ metrics:
 security_headers:
   enabled: true
 
+web:
+  enabled: true
+  mount_path: /admin
+
 vpn:
   public_host: "vpn.example.com"
   profiles:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vpn-control-panel"
-version = "0.1.0"
+version = "0.2.0"
 description = "VPN control panel for Xray and Hysteria2"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -45,6 +45,9 @@ vpn-create-admin = "panel.cli.create_admin:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["panel*", "broker_run*"]
+
+[tool.setuptools.package-data]
+"panel.web" = ["index.html", "static/**/*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -79,10 +79,6 @@ class WorkerSettings(BaseModel):
     )
 
 
-class PathsSettings(BaseModel):
-    configs: Path = Path("/opt/vpn/configs")
-
-
 class RateLimitRule(BaseModel):
     max_attempts: int | None = Field(default=None, ge=1)
     max_requests: int | None = Field(default=None, ge=1)
@@ -105,6 +101,11 @@ class MetricsSettings(BaseModel):
 
 class SecurityHeadersSettings(BaseModel):
     enabled: bool = True
+
+
+class WebSettings(BaseModel):
+    enabled: bool = True
+    mount_path: str = "/admin"
 
 
 class PathsSettings(BaseModel):
@@ -154,6 +155,7 @@ class PanelSettings(BaseModel):
     audit: AuditSettings = Field(default_factory=AuditSettings)
     metrics: MetricsSettings = Field(default_factory=MetricsSettings)
     security_headers: SecurityHeadersSettings = Field(default_factory=SecurityHeadersSettings)
+    web: WebSettings = Field(default_factory=WebSettings)
     vpn: VpnSettings
     telegram: TelegramSettings = Field(default_factory=TelegramSettings)
 

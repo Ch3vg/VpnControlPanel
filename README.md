@@ -1,12 +1,14 @@
 # VPN Control Panel
 
-Веб-панель для администрирования серверных VPN-конфигураций (Xray и Hysteria2). **v0.1.0 — только backend:** REST API, worker, шаблоны конфигов; админского UI нет.
+Веб-панель для администрирования серверных VPN-конфигураций (Xray и Hysteria2).
+
+**v0.2.0** — REST API + **admin UI** (`/admin`), worker, шаблоны конфигов.
 
 ---
 
 ## Обзор
 
-Панель решает проблему ручного редактирования конфигов и генерации ключей, предоставляя **REST API** с JWT-авторизацией для админов (Swagger/ReDoc в dev).
+Панель решает проблему ручного редактирования конфигов и генерации ключей: **REST API** с JWT и **веб-интерфейс** `/admin` для админов.
 
 Ключевые принципы:
 
@@ -82,6 +84,10 @@ VpnControlPanel/
 │   │   └── handlers/
 │   │       ├── config_initialize.py
 │   │       └── config_regenerate.py
+│   │
+│   ├── web/                      # admin UI (SPA, /admin)
+│   │   ├── index.html
+│   │   └── static/
 │   │
 │   └── config.py                 # загрузка panel.yaml
 │
@@ -372,6 +378,20 @@ mTLS планируется в брокере позже — схема HTTP API
 - `systemctl reload` через sudoers (без `shell=True`).
 - Запись файлов: temp → atomic rename (`os.replace`).
 
+### Admin UI (v0.2.0)
+
+| URL | Описание |
+|-----|----------|
+| `/admin` | SPA: login, список конфигов, карточка конфига |
+| `/admin/static/*` | CSS/JS без сборки (vanilla ES modules) |
+
+JWT хранится в `sessionStorage`. Отключение: `web.enabled: false` в `panel.yaml`.
+
+Экраны:
+- **Login** — `/auth/login`
+- **Список** — фильтр по protocol, создание конфига (name + protocol + profile)
+- **Детали** — polling статуса, regenerate, share-ссылка, revoke, delete
+
 ### Swagger / OpenAPI
 
 | `app.max_secure` | Поведение |
@@ -472,6 +492,10 @@ metrics:
 
 security_headers:
   enabled: true
+
+web:
+  enabled: true
+  mount_path: /admin
 
 vpn:
   public_host: "vpn.example.com"

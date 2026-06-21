@@ -1,0 +1,535 @@
+import { ApiError, api } from "./api.js";
+
+const PROFILES = {
+  xray: [
+    { value: "xray-reality", label: "Xray Reality" },
+    { value: "xray-grpc", label: "Xray gRPC" },
+    { value: "xray-xhttp", label: "Xray xHTTP" },
+    { value: "xray-client-in", label: "Xray client-in" },
+  ],
+  hysteria2: [{ value: "hysteria2", label: "Hysteria2" }],
+};
+
+const STATUS_LABELS = {
+  pending: "Ожидание",
+  processing: "Обработка",
+  active: "Активен",
+  failed: "Ошибка",
+};
+
+const appEl = document.getElementById("app");
+const toastEl = document.getElementById("toast");
+
+let pollTimer = null;
+let toastTimer = null;
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function formatDate(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("ru-RU");
+}
+
+function showToast(message, type = "info") {
+  toastEl.textContent = message;
+  toastEl.className = `toast ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toastEl.className = "toast hidden";
+  }, 4000);
+}
+
+function errorMessage(error) {
+  if (error instanceof ApiError) {
+    if (typeof error.detail === "string") return error.detail;
+    if (Array.isArray(error.detail)) {
+      return error.detail.map((item) => item.msg ?? JSON.stringify(item)).join("; ");
+    }
+  }
+  return error?.message ?? "Неизвестная ошибка";
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function navigate(path) {
+  stopPolling();
+  if (path === "/login") {
+    history.pushState(null, "", "#/login");
+    renderLogin();
+    return;
+  }
+  if (path === "/configs") {
+    history.pushState(null, "", "#/configs");
+    renderConfigs();
+    return;
+  }
+  const match = path.match(/^\/configs\/([0-9a-f-]+)$/i);
+  if (match) {
+    history.pushState(null, "", `#/configs/${match[1]}`);
+    renderConfigDetail(match[1]);
+    return;
+  }
+  history.replaceState(null, "", "#/configs");
+  renderConfigs();
+}
+
+function parseRoute() {
+  const hash = location.hash.replace(/^#/, "") || "/configs";
+  if (hash === "/login") return "/login";
+  if (hash === "/configs" || hash === "/") return "/configs";
+  const match = hash.match(/^\/configs\/([0-9a-f-]+)$/i);
+  if (match) return `/configs/${match[1]}`;
+  return "/configs";
+}
+
+function requireAuth() {
+  if (!api.token) {
+    navigate("/login");
+    return false;
+  }
+  return true;
+}
+
+function layoutHeader(title, actionsHtml = "") {
+  return `
+    <header class="layout-header">
+      <div class="brand">VPN Control Panel <span>${escapeHtml(title)}</span></div>
+      <div class="btn-row">${actionsHtml}</div>
+    </header>
+  `;
+}
+
+function statusBadge(status) {
+  const label = STATUS_LABELS[status] ?? status;
+  return `<span class="badge badge-${escapeHtml(status)}">${escapeHtml(label)}</span>`;
+}
+
+function renderLogin() {
+  appEl.innerHTML = `
+    <div class="login-wrap card">
+      <h1 class="card-title">Вход</h1>
+      <p class="muted">Админ-панель VPN Control Panel</p>
+      <form id="login-form">
+        <div class="field">
+          <label for="username">Имя пользователя</label>
+          <input id="username" name="username" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="password">Пароль</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <div id="login-error" class="error-box hidden"></div>
+        <button type="submit">Войти</button>
+      </form>
+    </div>
+  `;
+
+  document.getElementById("login-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const errorEl = document.getElementById("login-error");
+    errorEl.classList.add("hidden");
+    const submitBtn = form.querySelector("button[type=submit]");
+    submitBtn.disabled = true;
+
+    try {
+      const data = new FormData(form);
+      const result = await api.login(data.get("username"), data.get("password"));
+      api.token = result.access_token;
+      navigate("/configs");
+    } catch (error) {
+      errorEl.textContent = errorMessage(error);
+      errorEl.classList.remove("hidden");
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+}
+
+async function renderConfigs() {
+  if (!requireAuth()) return;
+
+  appEl.innerHTML = `
+    ${layoutHeader("Конфиги", `
+      <button type="button" class="secondary" id="logout-btn">Выйти</button>
+      <button type="button" id="create-btn">Создать конфиг</button>
+    `)}
+    <section class="card">
+      <div class="toolbar">
+        <div class="filters">
+          <label class="muted" for="protocol-filter">Протокол</label>
+          <select id="protocol-filter">
+            <option value="">Все</option>
+            <option value="xray">Xray</option>
+            <option value="hysteria2">Hysteria2</option>
+          </select>
+        </div>
+        <span id="configs-count" class="muted"></span>
+      </div>
+      <div id="configs-body" class="muted">Загрузка…</div>
+    </section>
+    <dialog id="create-dialog"></dialog>
+  `;
+
+  document.getElementById("logout-btn").addEventListener("click", () => {
+    api.clearToken();
+    navigate("/login");
+  });
+  document.getElementById("create-btn").addEventListener("click", openCreateDialog);
+  document.getElementById("protocol-filter").addEventListener("change", loadConfigsList);
+
+  await loadConfigsList();
+}
+
+async function loadConfigsList() {
+  const bodyEl = document.getElementById("configs-body");
+  const countEl = document.getElementById("configs-count");
+  const protocol = document.getElementById("protocol-filter").value;
+
+  try {
+    const data = await api.listConfigs(protocol ? { protocol } : {});
+    countEl.textContent = `Всего: ${data.total}`;
+
+    if (!data.items.length) {
+      bodyEl.innerHTML = `<div class="empty-state">Конфигов пока нет. Создайте первый.</div>`;
+      return;
+    }
+
+    bodyEl.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Имя</th>
+              <th>Протокол</th>
+              <th>Статус</th>
+              <th>Версия</th>
+              <th>Обновлён</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.items
+              .map(
+                (item) => `
+              <tr>
+                <td>${escapeHtml(item.name)}</td>
+                <td>${escapeHtml(item.protocol)}</td>
+                <td>${statusBadge(item.status)}</td>
+                <td>${item.current_version ?? "—"}</td>
+                <td>${escapeHtml(formatDate(item.updated_at))}</td>
+                <td><button type="button" class="link-btn" data-id="${escapeHtml(item.id)}">Открыть</button></td>
+              </tr>
+            `,
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    bodyEl.querySelectorAll("[data-id]").forEach((button) => {
+      button.addEventListener("click", () => navigate(`/configs/${button.dataset.id}`));
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      api.clearToken();
+      navigate("/login");
+      return;
+    }
+    bodyEl.innerHTML = `<div class="error-box">${escapeHtml(errorMessage(error))}</div>`;
+  }
+}
+
+function openCreateDialog() {
+  const dialog = document.getElementById("create-dialog");
+  dialog.innerHTML = `
+    <form method="dialog" class="card" style="border:none;box-shadow:none;min-width:min(420px,90vw)">
+      <h2 class="card-title">Новый конфиг</h2>
+      <div class="field">
+        <label for="create-name">Имя</label>
+        <input id="create-name" required maxlength="128" placeholder="Office VPN">
+      </div>
+      <div class="field">
+        <label for="create-protocol">Протокол</label>
+        <select id="create-protocol">
+          <option value="xray">Xray</option>
+          <option value="hysteria2">Hysteria2</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="create-profile">Профиль</label>
+        <select id="create-profile"></select>
+      </div>
+      <div id="create-error" class="error-box hidden"></div>
+      <div class="btn-row">
+        <button type="submit">Создать</button>
+        <button type="button" class="secondary" id="create-cancel">Отмена</button>
+      </div>
+    </form>
+  `;
+
+  const protocolEl = dialog.querySelector("#create-protocol");
+  const profileEl = dialog.querySelector("#create-profile");
+
+  function syncProfiles() {
+    const protocol = protocolEl.value;
+    profileEl.innerHTML = PROFILES[protocol]
+      .map((item) => `<option value="${item.value}">${escapeHtml(item.label)}</option>`)
+      .join("");
+  }
+
+  protocolEl.addEventListener("change", syncProfiles);
+  syncProfiles();
+
+  dialog.querySelector("#create-cancel").addEventListener("click", () => dialog.close());
+  dialog.querySelector("form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const errorEl = dialog.querySelector("#create-error");
+    errorEl.classList.add("hidden");
+    const submitBtn = dialog.querySelector("button[type=submit]");
+    submitBtn.disabled = true;
+
+    try {
+      const result = await api.createConfig({
+        name: dialog.querySelector("#create-name").value.trim(),
+        protocol: protocolEl.value,
+        profile: profileEl.value,
+      });
+      dialog.close();
+      showToast("Конфиг создаётся…", "success");
+      navigate(`/configs/${result.config_id}`);
+    } catch (error) {
+      errorEl.textContent = errorMessage(error);
+      errorEl.classList.remove("hidden");
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  if (typeof dialog.showModal === "function") {
+    dialog.showModal();
+  } else {
+    dialog.setAttribute("open", "open");
+  }
+}
+
+async function renderConfigDetail(configId) {
+  if (!requireAuth()) return;
+
+  appEl.innerHTML = `
+    ${layoutHeader("Конфиг", `
+      <button type="button" class="secondary" id="back-btn">← К списку</button>
+      <button type="button" class="secondary" id="logout-btn">Выйти</button>
+    `)}
+    <div id="detail-body" class="muted">Загрузка…</div>
+  `;
+
+  document.getElementById("back-btn").addEventListener("click", () => navigate("/configs"));
+  document.getElementById("logout-btn").addEventListener("click", () => {
+    api.clearToken();
+    navigate("/login");
+  });
+
+  await loadConfigDetail(configId);
+}
+
+async function loadConfigDetail(configId) {
+  const bodyEl = document.getElementById("detail-body");
+
+  try {
+    const [config, status] = await Promise.all([
+      api.getConfig(configId),
+      api.getConfigStatus(configId),
+    ]);
+    renderConfigDetailContent(config, status);
+
+    if (config.status === "pending" || config.status === "processing") {
+      stopPolling();
+      pollTimer = setInterval(() => refreshConfigDetail(configId), 2500);
+    }
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      api.clearToken();
+      navigate("/login");
+      return;
+    }
+    bodyEl.innerHTML = `<div class="error-box">${escapeHtml(errorMessage(error))}</div>`;
+  }
+}
+
+async function refreshConfigDetail(configId) {
+  try {
+    const [config, status] = await Promise.all([
+      api.getConfig(configId),
+      api.getConfigStatus(configId),
+    ]);
+    renderConfigDetailContent(config, status);
+    if (config.status !== "pending" && config.status !== "processing") {
+      stopPolling();
+    }
+  } catch (error) {
+    stopPolling();
+    showToast(errorMessage(error), "error");
+  }
+}
+
+function renderConfigDetailContent(config, status) {
+  const bodyEl = document.getElementById("detail-body");
+  const version = config.current_version_detail;
+  const canShare = config.status === "active";
+  const canRegenerate = config.status === "active" || config.status === "failed";
+
+  bodyEl.innerHTML = `
+    <section class="card">
+      <div class="toolbar">
+        <h1 class="card-title" style="margin:0">${escapeHtml(config.name)}</h1>
+        ${statusBadge(config.status)}
+      </div>
+      <div class="detail-grid">
+        <dl class="detail-item"><dt>ID</dt><dd>${escapeHtml(config.id)}</dd></dl>
+        <dl class="detail-item"><dt>Протокол</dt><dd>${escapeHtml(config.protocol)}</dd></dl>
+        <dl class="detail-item"><dt>Версия</dt><dd>${config.current_version ?? "—"}</dd></dl>
+        <dl class="detail-item"><dt>Создан</dt><dd>${escapeHtml(formatDate(config.created_at))}</dd></dl>
+        <dl class="detail-item"><dt>Обновлён</dt><dd>${escapeHtml(formatDate(config.updated_at))}</dd></dl>
+        <dl class="detail-item"><dt>Task ID</dt><dd>${escapeHtml(status.task_id ?? config.last_task_id ?? "—")}</dd></dl>
+        ${
+          status.task_status
+            ? `<dl class="detail-item"><dt>Статус задачи</dt><dd>${escapeHtml(status.task_status)}</dd></dl>`
+            : ""
+        }
+      </div>
+      ${
+        config.error_message || status.error_message
+          ? `<div class="error-box">${escapeHtml(config.error_message || status.error_message)}</div>`
+          : ""
+      }
+    </section>
+
+    ${
+      version
+        ? `
+      <section class="card">
+        <h2 class="card-title">Текущая версия</h2>
+        <div class="detail-grid">
+          <dl class="detail-item"><dt>Порт</dt><dd>${version.port}</dd></dl>
+          <dl class="detail-item"><dt>Public key</dt><dd>${escapeHtml(version.public_key || "—")}</dd></dl>
+          <dl class="detail-item"><dt>Cert fingerprint</dt><dd>${escapeHtml(version.cert_fingerprint || "—")}</dd></dl>
+          <dl class="detail-item"><dt>Создана</dt><dd>${escapeHtml(formatDate(version.created_at))}</dd></dl>
+        </div>
+      </section>
+    `
+        : ""
+    }
+
+    <section class="card">
+      <h2 class="card-title">Действия</h2>
+      <div class="btn-row">
+        <button type="button" id="regenerate-btn" ${canRegenerate ? "" : "disabled"}>Regenerate</button>
+        <button type="button" id="share-btn" ${canShare ? "" : "disabled"}>Share-ссылка</button>
+        <button type="button" class="danger" id="delete-btn">Удалить</button>
+      </div>
+      <div id="share-result"></div>
+      <div class="field" style="margin-top:1rem">
+        <label for="revoke-token">Отозвать share по token</label>
+        <div class="btn-row">
+          <input id="revoke-token" placeholder="token из URL">
+          <button type="button" class="secondary" id="revoke-btn">Отозвать</button>
+        </div>
+      </div>
+    </section>
+  `;
+
+  document.getElementById("regenerate-btn")?.addEventListener("click", () =>
+    handleRegenerate(config.id),
+  );
+  document.getElementById("share-btn")?.addEventListener("click", () => handleShare(config.id));
+  document.getElementById("delete-btn")?.addEventListener("click", () => handleDelete(config.id));
+  document.getElementById("revoke-btn")?.addEventListener("click", handleRevokeShare);
+}
+
+async function handleRegenerate(configId) {
+  if (!confirm("Перегенерировать ключи и создать новую версию?")) return;
+  try {
+    await api.regenerateConfig(configId);
+    showToast("Regenerate запущен", "success");
+    await loadConfigDetail(configId);
+  } catch (error) {
+    showToast(errorMessage(error), "error");
+  }
+}
+
+async function handleShare(configId) {
+  const resultEl = document.getElementById("share-result");
+  try {
+    const result = await api.createShareLink(configId);
+    resultEl.innerHTML = `
+      <div class="share-result">
+        <strong>Share-ссылка создана</strong>
+        <code id="share-url">${escapeHtml(result.url)}</code>
+        <div class="btn-row" style="margin-top:0.75rem">
+          <button type="button" class="secondary" id="copy-share">Копировать</button>
+        </div>
+      </div>
+    `;
+    document.getElementById("copy-share").addEventListener("click", async () => {
+      await navigator.clipboard.writeText(result.url);
+      showToast("Ссылка скопирована", "success");
+    });
+  } catch (error) {
+    resultEl.innerHTML = `<div class="error-box">${escapeHtml(errorMessage(error))}</div>`;
+  }
+}
+
+async function handleDelete(configId) {
+  if (!confirm("Удалить конфиг? Это soft delete.")) return;
+  try {
+    await api.deleteConfig(configId);
+    showToast("Конфиг удалён", "success");
+    navigate("/configs");
+  } catch (error) {
+    showToast(errorMessage(error), "error");
+  }
+}
+
+async function handleRevokeShare() {
+  const token = document.getElementById("revoke-token").value.trim();
+  if (!token) {
+    showToast("Укажите token", "error");
+    return;
+  }
+  try {
+    await api.revokeShareLink(token);
+    showToast("Share-ссылка отозвана", "success");
+    document.getElementById("revoke-token").value = "";
+  } catch (error) {
+    showToast(errorMessage(error), "error");
+  }
+}
+
+function bootstrap() {
+  window.addEventListener("hashchange", () => navigate(parseRoute()));
+  const route = parseRoute();
+  if (route === "/login") {
+    renderLogin();
+    return;
+  }
+  if (!api.token) {
+    navigate("/login");
+    return;
+  }
+  navigate(route);
+}
+
+bootstrap();
