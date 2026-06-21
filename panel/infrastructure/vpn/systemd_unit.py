@@ -94,8 +94,9 @@ def install_config_unit(
         atomic_write(unit_path, unit_content, mode=0o644)
     except PermissionError:
         write_unit_file(service_name, unit_content)
+
+    run_systemctl("daemon-reload")
     if first_install:
-        run_systemctl("daemon-reload")
         enable_service(service_name)
     reload_service(service_name)
     return service_name

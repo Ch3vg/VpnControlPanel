@@ -129,6 +129,7 @@ def test_install_config_unit_skips_enable_on_regenerate(panel_settings, tmp_path
                 )
 
     assert ("enable", service_name) not in calls
+    assert ("daemon-reload", None) in calls
     assert ("restart", service_name) in calls
 
 
