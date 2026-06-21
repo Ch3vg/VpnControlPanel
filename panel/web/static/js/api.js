@@ -117,6 +117,10 @@ export class ApiClient {
   revokeShareLink(token) {
     return this.request("DELETE", `/api/v1/share/${encodeURIComponent(token)}`);
   }
+
+  getSystemResources() {
+    return this.request("GET", "/api/v1/system/resources");
+  }
 }
 
 export const api = new ApiClient();

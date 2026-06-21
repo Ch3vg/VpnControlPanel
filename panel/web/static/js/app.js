@@ -21,6 +21,7 @@ const appEl = document.getElementById("app");
 const toastEl = document.getElementById("toast");
 
 let pollTimer = null;
+let resourcesPollTimer = null;
 let toastTimer = null;
 
 function escapeHtml(value) {
@@ -60,6 +61,96 @@ function stopPolling() {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+  if (resourcesPollTimer) {
+    clearInterval(resourcesPollTimer);
+    resourcesPollTimer = null;
+  }
+}
+
+function formatBytes(bytes) {
+  if (bytes == null) return "";
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** exponent;
+  const digits = exponent === 0 ? 0 : value >= 100 ? 0 : 1;
+  return `${value.toFixed(digits)} ${units[exponent]}`;
+}
+
+function resourceLevel(percent) {
+  if (percent >= 90) return "critical";
+  if (percent >= 70) return "warning";
+  return "ok";
+}
+
+function renderResourceRing(label, percent, detail = "") {
+  const level = resourceLevel(percent);
+  return `
+    <div class="resource-card">
+      <div class="resource-ring resource-ring--${level}" style="--percent: ${percent}">
+        <svg viewBox="0 0 36 36" aria-hidden="true">
+          <circle class="resource-ring-bg" cx="18" cy="18" r="15.9155"></circle>
+          <circle class="resource-ring-fill" cx="18" cy="18" r="15.9155" pathLength="100"></circle>
+        </svg>
+        <span class="resource-ring-value">${Math.round(percent)}%</span>
+      </div>
+      <div class="resource-meta">
+        <div class="resource-label">${escapeHtml(label)}</div>
+        ${detail ? `<div class="resource-detail muted">${escapeHtml(detail)}</div>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderResourcesPanel(data) {
+  const memoryDetail =
+    data.memory.used_bytes != null && data.memory.total_bytes != null
+      ? `${formatBytes(data.memory.used_bytes)} / ${formatBytes(data.memory.total_bytes)}`
+      : "";
+  const swapDetail =
+    data.swap.total_bytes
+      ? data.swap.used_bytes != null && data.swap.total_bytes != null
+        ? `${formatBytes(data.swap.used_bytes)} / ${formatBytes(data.swap.total_bytes)}`
+        : ""
+      : "не используется";
+  const diskDetail =
+    data.disk.used_bytes != null && data.disk.total_bytes != null
+      ? `${formatBytes(data.disk.used_bytes)} / ${formatBytes(data.disk.total_bytes)}`
+      : "";
+
+  return `
+    <div class="resource-grid">
+      ${renderResourceRing("CPU", data.cpu.percent)}
+      ${renderResourceRing("RAM", data.memory.percent, memoryDetail)}
+      ${renderResourceRing("SWAP", data.swap.percent, swapDetail)}
+      ${renderResourceRing("Disk", data.disk.percent, diskDetail)}
+    </div>
+    <p class="muted resource-footnote">Диск: ${escapeHtml(data.disk_path)}</p>
+  `;
+}
+
+async function loadSystemResources() {
+  const bodyEl = document.getElementById("resources-body");
+  if (!bodyEl) return;
+
+  try {
+    const data = await api.getSystemResources();
+    bodyEl.innerHTML = renderResourcesPanel(data);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      api.clearToken();
+      navigate("/login");
+      return;
+    }
+    bodyEl.innerHTML = `<div class="error-box">${escapeHtml(errorMessage(error))}</div>`;
+  }
+}
+
+function startResourcesPolling() {
+  if (resourcesPollTimer) {
+    clearInterval(resourcesPollTimer);
+  }
+  resourcesPollTimer = setInterval(loadSystemResources, 5000);
 }
 
 function navigate(path) {
@@ -290,10 +381,17 @@ async function renderConfigs() {
   if (!requireAuth()) return;
 
   appEl.innerHTML = `
-    ${layoutHeader("Конфиги", `
+    ${layoutHeader("Обзор", `
       <button type="button" class="secondary" id="logout-btn">Выйти</button>
       <button type="button" id="create-btn">Создать конфиг</button>
     `)}
+    <section class="card">
+      <div class="toolbar">
+        <h2 class="card-title" style="margin:0">Ресурсы сервера</h2>
+        <button type="button" class="secondary" id="resources-refresh">Обновить</button>
+      </div>
+      <div id="resources-body" class="muted">Загрузка…</div>
+    </section>
     <section class="card">
       <div class="toolbar">
         <div class="filters">
@@ -345,8 +443,10 @@ async function renderConfigs() {
   document.getElementById("share-links-refresh")?.addEventListener("click", () =>
     loadShareLinksList("share-links-body"),
   );
+  document.getElementById("resources-refresh")?.addEventListener("click", loadSystemResources);
 
-  await Promise.all([loadConfigsList(), loadShareLinksList("share-links-body")]);
+  await Promise.all([loadSystemResources(), loadConfigsList(), loadShareLinksList("share-links-body")]);
+  startResourcesPolling();
 }
 
 async function loadConfigsList() {

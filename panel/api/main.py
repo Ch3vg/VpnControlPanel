@@ -14,7 +14,7 @@ from fastapi.openapi.utils import get_openapi
 
 from panel.api.deps import get_current_user
 from panel.api.middleware.security_headers import SecurityHeadersMiddleware
-from panel.api.routers import auth, configs, health, metrics, share
+from panel.api.routers import auth, configs, health, metrics, share, system
 from panel.api.web import setup_web_ui
 from panel.config import PanelSettings, load_panel_settings
 from panel.infrastructure.logging import configure_logging
@@ -55,6 +55,7 @@ def create_app(settings: PanelSettings, *, with_db: bool = True) -> FastAPI:
         app.include_router(metrics.router)
     app.include_router(auth.router)
     app.include_router(configs.router)
+    app.include_router(system.router)
     app.include_router(share.public_router)
     app.include_router(share.admin_router)
 

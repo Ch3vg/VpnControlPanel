@@ -25,6 +25,7 @@ dependencies = [
     "cryptography>=44.0",
     "structlog>=24.4",
     "prometheus-client>=0.21",
+    "psutil>=6.0",
 ]
 
 [project.optional-dependencies]
