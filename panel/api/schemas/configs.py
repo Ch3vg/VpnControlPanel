@@ -86,6 +86,22 @@ class ConfigStatusResponse(BaseModel):
     retries: int | None = None
     max_retries: int | None = None
     error_message: str | None = None
+    runtime_online: bool | None = None
+    runtime_systemd_active: bool | None = None
+    runtime_port_listening: bool | None = None
+    runtime_detail: str | None = None
+
+
+class ConfigRuntimeItemResponse(BaseModel):
+    config_id: str
+    online: bool | None
+    systemd_active: bool | None
+    port_listening: bool | None
+    detail: str | None = None
+
+
+class ConfigRuntimeListResponse(BaseModel):
+    items: list[ConfigRuntimeItemResponse]
 
 
 class ConfigDetailResponse(BaseModel):

@@ -62,8 +62,6 @@ def render_unit(
         "[Service]\n"
         "Type=simple\n"
         f"ExecStart={exec_start}\n"
-        "Restart=on-failure\n"
-        "RestartSec=5\n"
         "LimitNOFILE=1048576\n"
         "\n"
         "[Install]\n"

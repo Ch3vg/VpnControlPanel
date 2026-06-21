@@ -245,6 +245,19 @@ tbody tr:hover {
   color: var(--danger);
 }
 
+.badge-offline {
+  background: rgba(249, 115, 22, 0.18);
+  color: #f97316;
+}
+
+.runtime-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;

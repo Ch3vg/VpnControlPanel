@@ -42,6 +42,7 @@ def test_render_xray_unit(panel_settings) -> None:
     assert "ExecStart=/usr/local/bin/xray run -config" in unit
     assert config_path.as_posix() in unit
     assert "Description=VPN Office" in unit
+    assert "Restart=" not in unit
 
 
 def test_render_hysteria_unit(panel_settings) -> None:

@@ -9,6 +9,8 @@ from panel.api.deps import CurrentUserDep, SettingsDep, get_db_session, make_aud
 from panel.api.schemas.configs import (
     ConfigDetailResponse,
     ConfigListResponse,
+    ConfigRuntimeListResponse,
+    ConfigRuntimeItemResponse,
     ConfigStatusResponse,
     CreateConfigRequest,
     CreateConfigResponse,
@@ -31,6 +33,7 @@ from panel.application.create_share_link import (
     CreateShareLinkUseCase,
 )
 from panel.application.share_expiration import InvalidShareRequest
+from panel.application.get_config_runtime import GetConfigsRuntimeUseCase
 from panel.application.get_config_status import GetConfigStatusUseCase
 from panel.application.regenerate_config import ConfigNotRegeneratable, RegenerateConfigUseCase
 from panel.application.regenerate_all_configs import RegenerateAllConfigsUseCase
@@ -59,6 +62,29 @@ async def list_configs(
         total=result.total,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get("/runtime", response_model=ConfigRuntimeListResponse)
+async def list_configs_runtime(
+    _user: CurrentUserDep,
+    settings: SettingsDep,
+    session: AsyncSession = Depends(get_db_session),
+    protocol: VpnProtocolType | None = Query(default=None),
+) -> ConfigRuntimeListResponse:
+    use_case = GetConfigsRuntimeUseCase(VpnConfigRepository(session), settings)
+    items = await use_case.execute(protocol=protocol)
+    return ConfigRuntimeListResponse(
+        items=[
+            ConfigRuntimeItemResponse(
+                config_id=str(item.config_id),
+                online=item.online,
+                systemd_active=item.systemd_active,
+                port_listening=item.port_listening,
+                detail=item.detail,
+            )
+            for item in items
+        ],
     )
 
 
@@ -203,7 +229,7 @@ async def get_config_status(
 ) -> ConfigStatusResponse:
     broker = HttpBrokerClient(settings.broker)
     try:
-        use_case = GetConfigStatusUseCase(VpnConfigRepository(session), broker)
+        use_case = GetConfigStatusUseCase(VpnConfigRepository(session), broker, settings)
         try:
             result = await use_case.execute(config_id)
         except ConfigNotFound:
@@ -218,6 +244,10 @@ async def get_config_status(
         retries=result.retries,
         max_retries=result.max_retries,
         error_message=result.error_message,
+        runtime_online=result.runtime_online,
+        runtime_systemd_active=result.runtime_systemd_active,
+        runtime_port_listening=result.runtime_port_listening,
+        runtime_detail=result.runtime_detail,
     )
 
 

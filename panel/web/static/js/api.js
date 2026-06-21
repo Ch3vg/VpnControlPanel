@@ -122,6 +122,13 @@ export class ApiClient {
     return this.request("DELETE", `/api/v1/share/${encodeURIComponent(token)}`);
   }
 
+  getConfigsRuntime(params = {}) {
+    const query = new URLSearchParams();
+    if (params.protocol) query.set("protocol", params.protocol);
+    const suffix = query.toString() ? `?${query}` : "";
+    return this.request("GET", `/api/v1/configs/runtime${suffix}`);
+  }
+
   getSystemResources() {
     return this.request("GET", "/api/v1/system/resources");
   }

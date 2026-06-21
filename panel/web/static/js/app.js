@@ -15,6 +15,7 @@ const STATUS_LABELS = {
   processing: "Обработка",
   active: "Активен",
   failed: "Ошибка",
+  offline: "Недоступен",
 };
 
 const appEl = document.getElementById("app");
@@ -22,7 +23,9 @@ const toastEl = document.getElementById("toast");
 
 let pollTimer = null;
 let resourcesPollTimer = null;
+let runtimePollTimer = null;
 let toastTimer = null;
+let runtimeById = {};
 
 function escapeHtml(value) {
   return String(value)
@@ -64,6 +67,10 @@ function stopPolling() {
   if (resourcesPollTimer) {
     clearInterval(resourcesPollTimer);
     resourcesPollTimer = null;
+  }
+  if (runtimePollTimer) {
+    clearInterval(runtimePollTimer);
+    runtimePollTimer = null;
   }
 }
 
@@ -153,6 +160,13 @@ function startResourcesPolling() {
   resourcesPollTimer = setInterval(loadSystemResources, 5000);
 }
 
+function startRuntimePolling() {
+  if (runtimePollTimer) {
+    clearInterval(runtimePollTimer);
+  }
+  runtimePollTimer = setInterval(loadConfigsRuntime, 5000);
+}
+
 function navigate(path) {
   stopPolling();
   if (path === "/login") {
@@ -201,9 +215,26 @@ function layoutHeader(title, actionsHtml = "") {
   `;
 }
 
-function statusBadge(status) {
-  const label = STATUS_LABELS[status] ?? status;
-  return `<span class="badge badge-${escapeHtml(status)}">${escapeHtml(label)}</span>`;
+function statusBadge(status, label = null) {
+  const text = label ?? STATUS_LABELS[status] ?? status;
+  return `<span class="badge badge-${escapeHtml(status)}">${escapeHtml(text)}</span>`;
+}
+
+function configStatusDisplay(configStatus, runtimeOnline = null) {
+  if (configStatus === "active" && runtimeOnline === false) {
+    return statusBadge("offline");
+  }
+  return statusBadge(configStatus);
+}
+
+function runtimeStatusLine(status) {
+  if (status?.runtime_online !== true && status?.runtime_online !== false) {
+    return "";
+  }
+  const label = status.runtime_online ? "VPN доступен" : "VPN недоступен";
+  const badge = status.runtime_online ? statusBadge("active", label) : statusBadge("offline", label);
+  const detail = status.runtime_detail ? `<span class="muted">${escapeHtml(status.runtime_detail)}</span>` : "";
+  return `<div class="runtime-status">${badge} ${detail}</div>`;
 }
 
 function renderLogin() {
@@ -451,6 +482,7 @@ async function renderConfigs() {
 
   await Promise.all([loadSystemResources(), loadConfigsList(), loadShareLinksList("share-links-body")]);
   startResourcesPolling();
+  startRuntimePolling();
 }
 
 async function handleRegenerateAll() {
@@ -476,6 +508,26 @@ async function handleRegenerateAll() {
   }
 }
 
+async function loadConfigsRuntime() {
+  const protocol = document.getElementById("protocol-filter")?.value;
+  try {
+    const data = await api.getConfigsRuntime(protocol ? { protocol } : {});
+    runtimeById = Object.fromEntries(data.items.map((item) => [item.config_id, item]));
+    const bodyEl = document.getElementById("configs-body");
+    if (!bodyEl) return;
+    bodyEl.querySelectorAll("tr [data-runtime-id]").forEach((cell) => {
+      const configId = cell.dataset.runtimeId;
+      const configStatus = cell.dataset.configStatus;
+      const runtime = runtimeById[configId];
+      cell.innerHTML = configStatusDisplay(configStatus, runtime?.online ?? null);
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      api.clearToken();
+      navigate("/login");
+    }
+  }
+}
 async function loadConfigsList() {
   const bodyEl = document.getElementById("configs-body");
   const countEl = document.getElementById("configs-count");
@@ -510,7 +562,7 @@ async function loadConfigsList() {
               <tr>
                 <td>${escapeHtml(item.name)}</td>
                 <td>${escapeHtml(item.protocol)}</td>
-                <td>${statusBadge(item.status)}</td>
+                <td data-runtime-id="${escapeHtml(item.id)}" data-config-status="${escapeHtml(item.status)}">${configStatusDisplay(item.status, runtimeById[item.id]?.online ?? null)}</td>
                 <td>${item.current_version ?? "—"}</td>
                 <td>${escapeHtml(formatDate(item.updated_at))}</td>
                 <td><button type="button" class="link-btn" data-id="${escapeHtml(item.id)}">Открыть</button></td>
@@ -526,6 +578,7 @@ async function loadConfigsList() {
     bodyEl.querySelectorAll("[data-id]").forEach((button) => {
       button.addEventListener("click", () => navigate(`/configs/${button.dataset.id}`));
     });
+    await loadConfigsRuntime();
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
       api.clearToken();
@@ -642,6 +695,9 @@ async function loadConfigDetail(configId) {
     if (config.status === "pending" || config.status === "processing") {
       stopPolling();
       pollTimer = setInterval(() => refreshConfigDetail(configId), 2500);
+    } else if (config.status === "active") {
+      stopPolling();
+      pollTimer = setInterval(() => refreshConfigDetail(configId), 5000);
     }
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
@@ -660,7 +716,7 @@ async function refreshConfigDetail(configId) {
       api.getConfigStatus(configId),
     ]);
     renderConfigDetailContent(config, status);
-    if (config.status !== "pending" && config.status !== "processing") {
+    if (config.status !== "pending" && config.status !== "processing" && config.status !== "active") {
       stopPolling();
     }
   } catch (error) {
@@ -679,8 +735,9 @@ function renderConfigDetailContent(config, status) {
     <section class="card">
       <div class="toolbar">
         <h1 class="card-title" style="margin:0">${escapeHtml(config.name)}</h1>
-        ${statusBadge(config.status)}
+        ${configStatusDisplay(config.status, status.runtime_online ?? null)}
       </div>
+      ${runtimeStatusLine(status)}
       <div class="detail-grid">
         <dl class="detail-item"><dt>ID</dt><dd>${escapeHtml(config.id)}</dd></dl>
         <dl class="detail-item"><dt>Протокол</dt><dd>${escapeHtml(config.protocol)}</dd></dl>
