@@ -9,6 +9,8 @@ User=${VCP_PANEL_USER}
 Group=${VCP_PANEL_USER}
 WorkingDirectory=${VCP_INSTALL_DIR}
 Environment=PANEL_CONFIG_PATH=${VCP_CONFIG_DIR}/panel.yaml
+Environment="VPN_SYSTEMCTL_CMD=sudo -n /usr/local/bin/vpn-systemctl"
+Environment=VPN_SERVICE_PREFIX=vpn-
 ExecStart=${VCP_INSTALL_DIR}/.venv/bin/vpn-api
 Restart=on-failure
 RestartSec=5

@@ -7,7 +7,12 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from panel.application.configs import DeleteConfigUseCase
+from panel.application.audit_service import AuditService
 from panel.infrastructure.persistence.models import AuditLogModel, VpnConfigModel
+from panel.infrastructure.persistence.repositories.audit import AuditRepository
+from panel.infrastructure.persistence.repositories.user import UserRepository
+from panel.infrastructure.persistence.repositories.vpn_config import VpnConfigRepository
 
 
 @pytest.mark.asyncio
@@ -83,9 +88,18 @@ async def test_delete_config_soft_delete(
     sample_config: uuid.UUID,
     second_config: uuid.UUID,
     db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    removed: list[uuid.UUID] = []
+
+    def fake_remove(*args, **kwargs) -> None:
+        removed.append(args[1])
+
+    monkeypatch.setattr("panel.application.configs.remove_config_unit", fake_remove)
+
     response = await api_client.delete(f"/api/v1/configs/{sample_config}", headers=auth_headers)
     assert response.status_code == 204
+    assert removed == []
 
     result = await db_session.execute(select(VpnConfigModel).where(VpnConfigModel.id == sample_config))
     model = result.scalar_one()
@@ -118,3 +132,37 @@ async def test_delete_config_audit(
 async def test_delete_config_not_found(api_client: AsyncClient, auth_headers: dict[str, str]) -> None:
     response = await api_client.delete(f"/api/v1/configs/{uuid.uuid4()}", headers=auth_headers)
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_use_case_removes_unit_when_per_config(
+    panel_settings,
+    db_session: AsyncSession,
+    sample_config: uuid.UUID,
+    admin_user: tuple[str, str, uuid.UUID],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _, user_id = admin_user
+    settings = panel_settings.model_copy(
+        update={"systemd": panel_settings.systemd.model_copy(update={"per_config": True})},
+    )
+    removed: list[uuid.UUID] = []
+
+    def fake_remove(_profile, config_id, **kwargs) -> None:
+        removed.append(config_id)
+
+    monkeypatch.setattr("panel.application.configs.remove_config_unit", fake_remove)
+
+    user = await UserRepository(db_session).get_by_id(user_id)
+    assert user is not None
+    use_case = DeleteConfigUseCase(
+        VpnConfigRepository(db_session),
+        AuditService(settings, AuditRepository(db_session)),
+        settings,
+    )
+    await use_case.execute(sample_config, user)
+    await db_session.commit()
+
+    assert removed == [sample_config]
+    result = await db_session.execute(select(VpnConfigModel).where(VpnConfigModel.id == sample_config))
+    assert result.scalar_one().is_active is False

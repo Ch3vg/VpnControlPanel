@@ -209,6 +209,7 @@ async def delete_config(
     use_case = DeleteConfigUseCase(
         VpnConfigRepository(session),
         make_audit_service(settings, session),
+        settings,
     )
     try:
         await use_case.execute(config_id, user)

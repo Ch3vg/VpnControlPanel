@@ -20,6 +20,18 @@ case "${ACTION}" in
     install -m 644 "${TMP}" "${UNIT_PATH}"
     exit 0
     ;;
+  remove-unit)
+    if [[ -z "${SERVICE}" || "${SERVICE}" != "${PREFIX}"* ]]; then
+      echo "Service name must start with ${PREFIX}" >&2
+      exit 1
+    fi
+    UNIT_PATH="/etc/systemd/system/${SERVICE}.service"
+    /bin/systemctl stop "${SERVICE}" 2>/dev/null || true
+    /bin/systemctl disable "${SERVICE}" 2>/dev/null || true
+    rm -f "${UNIT_PATH}"
+    /bin/systemctl daemon-reload
+    exit 0
+    ;;
   enable|disable|restart|stop|start)
     if [[ -z "${SERVICE}" || "${SERVICE}" != "${PREFIX}"* ]]; then
       echo "Service name must start with ${PREFIX}" >&2

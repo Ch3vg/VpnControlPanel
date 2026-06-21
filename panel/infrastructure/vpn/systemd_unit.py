@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
 import uuid
 from pathlib import Path
 
 from panel.config import SystemdSettings
 from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.infrastructure.filesystem.writer import atomic_write
-from panel.infrastructure.vpn.systemd_reload import enable_service, reload_service, run_systemctl, write_unit_file
+from panel.infrastructure.vpn.systemd_reload import (
+    enable_service,
+    reload_service,
+    remove_unit_file,
+    run_systemctl,
+    write_unit_file,
+)
 
 
 def config_service_name(config_id: uuid.UUID, *, prefix: str = "vpn") -> str:
@@ -91,3 +99,30 @@ def install_config_unit(
         enable_service(service_name)
     reload_service(service_name)
     return service_name
+
+
+def remove_config_unit(
+    profile: ConfigProfile,
+    config_id: uuid.UUID,
+    *,
+    config_filename: str,
+    settings: SystemdSettings,
+) -> None:
+    service_name = config_service_name(config_id, prefix=settings.service_prefix)
+    unit_path = unit_file_path(service_name, settings)
+    if not unit_path.is_file():
+        return
+
+    try:
+        for action in ("stop", "disable"):
+            try:
+                run_systemctl(action, service_name)
+            except subprocess.CalledProcessError:
+                pass
+        unit_path.unlink()
+        run_systemctl("daemon-reload")
+    except (OSError, PermissionError, subprocess.CalledProcessError):
+        remove_unit_file(service_name)
+
+    live_dir = live_config_path(profile, config_id, config_filename, settings).parent
+    shutil.rmtree(live_dir, ignore_errors=True)

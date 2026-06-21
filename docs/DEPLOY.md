@@ -193,7 +193,7 @@ Environment=VPN_SYSTEMCTL_ACTION=restart
 
 Sudoers (`/etc/sudoers.d/vpn-worker`, `make install-sudoers`):
 
-- `/usr/local/bin/vpn-systemctl` — per-config units `vpn-{config_id}` (`systemd.per_config: true`)
+- `/usr/local/bin/vpn-systemctl` — per-config units `vpn-{config_id}` (`systemd.per_config: true`); доступен `vpn-worker` и `vpn-panel` (API delete)
 - Legacy: `xray_reality`, `xray_grpc`, … — если `systemd.per_config: false`
 
 При `systemd.per_config: true` воркер при create/regenerate:
@@ -201,6 +201,8 @@ Sudoers (`/etc/sudoers.d/vpn-worker`, `make install-sudoers`):
 1. Пишет live-конфиг в `/usr/local/etc/xray/configs/{config_id}/` или `/usr/local/etc/hysteria/configs/{config_id}/`
 2. Создаёт `/etc/systemd/system/vpn-{config_id}.service`
 3. Выполняет `daemon-reload`, `enable`, `restart`
+
+При **delete** конфига API останавливает сервис, удаляет unit-файл и каталог live-конфига (через `vpn-systemctl remove-unit`).
 
 Проверка:
 

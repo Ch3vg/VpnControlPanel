@@ -1,5 +1,6 @@
-# Allow worker to manage per-config VPN units via restricted wrapper.
+# Allow worker and API to manage per-config VPN units via restricted wrapper.
 ${VCP_WORKER_USER} ALL=(root) NOPASSWD: /usr/local/bin/vpn-systemctl
+${VCP_PANEL_USER} ALL=(root) NOPASSWD: /usr/local/bin/vpn-systemctl
 
 # Legacy profile-based services (when systemd.per_config: false)
 ${VCP_WORKER_USER} ALL=(root) NOPASSWD: /bin/systemctl restart xray_reality

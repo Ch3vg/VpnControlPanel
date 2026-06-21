@@ -12,6 +12,7 @@ from panel.infrastructure.vpn.systemd_unit import (
     config_service_name,
     install_config_unit,
     live_config_path,
+    remove_config_unit,
     render_unit,
     unit_file_path,
 )
@@ -171,3 +172,55 @@ def test_install_config_unit_writes_via_wrapper_on_permission_error(
     assert written
     assert written[0][0] == service_name
     assert "Description=VPN Office" in written[0][1]
+
+
+def test_remove_config_unit_deletes_unit_and_live_dir(panel_settings, tmp_path, monkeypatch) -> None:
+    settings = panel_settings.systemd.model_copy(
+        update={
+            "per_config": True,
+            "unit_dir": tmp_path / "units",
+            "xray_config_dir": tmp_path / "live" / "xray",
+        },
+    )
+    config_id = uuid.uuid4()
+    service_name = config_service_name(config_id)
+    unit_path = unit_file_path(service_name, settings)
+    unit_path.parent.mkdir(parents=True, exist_ok=True)
+    unit_path.write_text("[Unit]\n", encoding="utf-8")
+    live_path = live_config_path(ConfigProfile.XRAY_REALITY, config_id, "config.json", settings)
+    live_path.parent.mkdir(parents=True, exist_ok=True)
+    live_path.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.run_systemctl", lambda *a, **k: None)
+
+    remove_config_unit(
+        ConfigProfile.XRAY_REALITY,
+        config_id,
+        config_filename="config.json",
+        settings=settings,
+    )
+
+    assert not unit_path.is_file()
+    assert not live_path.parent.exists()
+
+
+def test_remove_config_unit_noop_when_unit_missing(panel_settings, tmp_path, monkeypatch) -> None:
+    settings = panel_settings.systemd.model_copy(
+        update={
+            "per_config": True,
+            "unit_dir": tmp_path / "units",
+            "xray_config_dir": tmp_path / "live" / "xray",
+        },
+    )
+    config_id = uuid.uuid4()
+    monkeypatch.setattr(
+        "panel.infrastructure.vpn.systemd_unit.remove_unit_file",
+        lambda _name: (_ for _ in ()).throw(AssertionError("should not call wrapper")),
+    )
+
+    remove_config_unit(
+        ConfigProfile.XRAY_REALITY,
+        config_id,
+        config_filename="config.json",
+        settings=settings,
+    )

@@ -35,3 +35,8 @@ def enable_service(service_name: str) -> None:
 def write_unit_file(service_name: str, content: str) -> None:
     cmd = [*_systemctl_command(), "write-unit", service_name]
     subprocess.run(cmd, input=content.encode(), check=True, timeout=30)
+
+
+def remove_unit_file(service_name: str) -> None:
+    cmd = [*_systemctl_command(), "remove-unit", service_name]
+    subprocess.run(cmd, check=True, timeout=30)
