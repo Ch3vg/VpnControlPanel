@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .PHONY: help init-env secrets render deploy deploy-deps deploy-users deploy-db install-app \
         setup-config migrate create-admin install-systemd install-sudoers install-nginx \
-        restart status logs chmod-scripts check-scripts uninstall uninstall-keep-db
+        restart status logs chmod-scripts check-scripts uninstall uninstall-keep-db update
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -76,3 +76,9 @@ uninstall: chmod-scripts ## Remove panel services, configs, data (sudo; reads de
 
 uninstall-keep-db: chmod-scripts ## Uninstall but keep PostgreSQL database
 	sudo deploy/scripts/uninstall.sh --keep-db
+
+update: chmod-scripts ## Apply updates after git pull (sudo)
+	sudo deploy/scripts/update.sh
+
+update-quick: chmod-scripts ## Update without git pull / nginx
+	sudo deploy/scripts/update.sh --no-pull --skip-nginx

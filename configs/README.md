@@ -15,6 +15,9 @@
 - загружает шаблон;
 - подставляет port, keys, client UUID, shortIds (Reality) и т.д.;
 - обновляет `inboundTag` в `routing.rules`;
-- пишет итог в `{paths.configs}/{config_id}/`.
+- пишет итог в `{paths.configs}/{config_id}/` (архив версии);
+- если задан `active_config_path` в профиле — **тот же файл** в путь, откуда читает systemd (`xray`, `hysteria`).
+
+**Важно:** `active_config_path` должен совпадать с `-config` в unit-файле VPN-сервиса. Иначе панель сохранит порт в БД, а Xray продолжит слушать старый конфиг — порты в UI и на сервере разойдутся.
 
 Перед production скопируйте шаблоны и настройте под свой сервер: outbounds, routing, `dest`/`serverNames`, пути к сертификатам, upstream-адреса. Значения в репозитории — **примеры** (TEST-NET IP, placeholder keys).

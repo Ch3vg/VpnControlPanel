@@ -225,12 +225,18 @@ sudo systemctl restart vpn-worker
 
 ```bash
 cd /opt/vpn-control-panel
-git pull
-sudo make install-app
-sudo make migrate
-sudo make setup-config   # если менялись шаблоны
-sudo make restart
+sudo make update
 ```
+
+Или без `git pull` / nginx:
+
+```bash
+sudo make update-quick
+```
+
+`make update` выполняет: `git pull`, `pip install`, перерендер `panel.yaml`, миграции, systemd/sudoers, restart.
+
+### Вручную
 
 ---
 
@@ -263,6 +269,7 @@ curl -s -X POST http://127.0.0.1:8000/auth/login \
 |---------|---------|
 | Конфиг в `pending` | `journalctl -u vpn-worker`; проверьте `broker.api_key` |
 | `Job type reload is not applicable` | Xray не поддерживает reload — используйте `restart` в коде/sudoers (см. выше) |
+| Порт в UI ≠ порт Xray | Задайте `active_config_path` в `panel.yaml` = путь из unit VPN-сервиса; `make update` |
 | `sudo: command not allowed` / `COMMAND=reload` | В unit не в кавычках `VPN_SYSTEMCTL_CMD` → вызывается `sudo reload`. Исправьте unit, установите sudoers, см. ниже |
 | `Permission denied: panel.yaml` | Worker не в группе `vpn-panel`: `sudo usermod -aG vpn-panel vpn-worker`, каталог conf `750 root:vpn-panel`, файл `640`; `make fix-config-perms` |
 | `failed` при create | Права на `VCP_VPN_CONFIGS_DIR`, sudoers для systemctl |

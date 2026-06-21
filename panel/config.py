@@ -119,6 +119,7 @@ class VpnProfileSettings(BaseModel):
     config_filename: str
     inbound_tag: str = ""
     port_candidates: list[int] = Field(default_factory=list)
+    active_config_path: Path | None = None
     cert_dir: Path | None = None
     cert_prefix: str | None = None
     xhttp_hosts: list[str] = Field(default_factory=list)

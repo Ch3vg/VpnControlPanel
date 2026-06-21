@@ -38,6 +38,13 @@ class PreviousSecrets:
     password: str | None = None
 
 
+def listening_port(profile: ConfigProfile, config_data: dict[str, Any], profile_settings: VpnProfileSettings) -> int:
+    if profile is ConfigProfile.HYSTERIA2:
+        return int(str(config_data["listen"]).lstrip(":"))
+    inbound = find_inbound(config_data, profile_settings.inbound_tag)
+    return int(inbound["port"])
+
+
 class ProfileConfigBuilder:
     def __init__(self, settings: PanelSettings) -> None:
         self._settings = settings
@@ -79,11 +86,17 @@ class ProfileConfigBuilder:
         base_path.mkdir(parents=True, exist_ok=True)
 
         if profile is ConfigProfile.HYSTERIA2:
-            config_path = base_path / profile_settings.config_filename
-            atomic_write(config_path, yaml.safe_dump(result.config_data, sort_keys=False))
+            body = yaml.safe_dump(result.config_data, sort_keys=False)
         else:
-            config_path = base_path / profile_settings.config_filename
-            atomic_write(config_path, json_dumps(result.config_data))
+            body = json_dumps(result.config_data)
+
+        config_path = base_path / profile_settings.config_filename
+        atomic_write(config_path, body)
+
+        if profile_settings.active_config_path is not None:
+            active_path = Path(profile_settings.active_config_path)
+            active_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write(active_path, body)
 
         cert_dir = profile_settings.cert_dir
         if cert_dir is not None and result.extra_files:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from panel.domain.value_objects.config_profile import ConfigProfile
@@ -47,3 +49,27 @@ def test_hysteria2_writes_cert_paths(panel_settings, tmp_path) -> None:
     assert result.config_data["tls"]["key"].endswith("hysteria-key.pem")
     assert result.extra_files["cert"]
     assert result.extra_files["key"]
+
+
+def test_write_files_active_config_path(panel_settings, tmp_path, monkeypatch) -> None:
+    active = tmp_path / "live" / "config.json"
+    profiles = dict(panel_settings.vpn.profiles)
+    profiles["xray-reality"] = profiles["xray-reality"].model_copy(
+        update={"active_config_path": active},
+    )
+    settings = panel_settings.model_copy(
+        update={"vpn": panel_settings.vpn.model_copy(update={"profiles": profiles})},
+    )
+    settings.paths.configs = tmp_path / "archive"
+    monkeypatch.setattr("panel.infrastructure.vpn.config_builder.reload_service", lambda _s: None)
+
+    builder = ProfileConfigBuilder(settings)
+    result = builder.build(ConfigProfile.XRAY_REALITY, name="Office")
+    config_id = uuid.uuid4()
+    builder.write_files(ConfigProfile.XRAY_REALITY, config_id, result)
+
+    assert active.is_file()
+    archive = settings.paths.configs / str(config_id) / "config.json"
+    assert archive.is_file()
+    assert active.read_text(encoding="utf-8") == archive.read_text(encoding="utf-8")
+    assert str(result.port) in active.read_text(encoding="utf-8")

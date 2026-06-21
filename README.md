@@ -535,6 +535,7 @@ telegram:
 make init-env    # cp deploy/env.example deploy/.env
 # задайте VCP_TASK_BROKER_WHL и домены
 make deploy      # sudo, Debian/Ubuntu
+make update      # sudo, после git pull
 ```
 
 ---

@@ -8,7 +8,7 @@ import structlog
 from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.infrastructure.crypto.config_data import decrypt_config_data_fields, encrypt_config_data_fields
 from panel.infrastructure.persistence.repositories.vpn_config import VpnConfigRepository
-from panel.infrastructure.vpn.config_builder import ProfileConfigBuilder, previous_for_regenerate
+from panel.infrastructure.vpn.config_builder import ProfileConfigBuilder, listening_port, previous_for_regenerate
 from panel.worker.context import WorkerContext, cert_fingerprint_for_keys
 
 logger = structlog.get_logger(__name__)
@@ -44,7 +44,10 @@ async def build_and_persist_version(
                 public_key=snapshot.public_key,
             )
 
-    result = builder.build(profile, name=name, previous=previous)
+    used_ports = await repo.list_used_ports()
+    result = builder.build(profile, name=name, previous=previous, exclude_ports=used_ports)
+    profile_settings = ctx.settings.vpn.profiles[profile.value]
+    result.port = listening_port(profile, result.config_data, profile_settings)
     builder.write_files(profile, config_id, result)
 
     config_data_stored = encrypt_config_data_fields(
