@@ -1,5 +1,5 @@
 [Unit]
-Description=VPN Control Panel Worker
+Description=VPN Control Panel Worker instance %i
 After=network.target postgresql.service vpn-broker.service
 Requires=vpn-broker.service
 
@@ -9,6 +9,7 @@ User=${VCP_WORKER_USER}
 Group=${VCP_WORKER_USER}
 WorkingDirectory=${VCP_INSTALL_DIR}
 Environment=PANEL_CONFIG_PATH=${VCP_CONFIG_DIR}/panel.yaml
+Environment=VPN_WORKER_INSTANCE=%i
 Environment="VPN_SYSTEMCTL_CMD=sudo -n /usr/local/bin/vpn-systemctl"
 Environment=VPN_SYSTEMCTL_ACTION=restart
 Environment=VPN_SERVICE_PREFIX=vpn-

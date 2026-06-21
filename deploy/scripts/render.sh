@@ -11,7 +11,7 @@ render_template "${DEPLOY_DIR}/templates/broker.yaml.in" "${OUTPUT_DIR}/broker.y
 render_template "${DEPLOY_DIR}/templates/panel.yaml.in" "${OUTPUT_DIR}/panel.yaml"
 render_template "${DEPLOY_DIR}/templates/systemd/vpn-broker.service.in" "${OUTPUT_DIR}/systemd/vpn-broker.service"
 render_template "${DEPLOY_DIR}/templates/systemd/vpn-api.service.in" "${OUTPUT_DIR}/systemd/vpn-api.service"
-render_template "${DEPLOY_DIR}/templates/systemd/vpn-worker.service.in" "${OUTPUT_DIR}/systemd/vpn-worker.service"
+render_template "${DEPLOY_DIR}/templates/systemd/vpn-worker@.service.in" "${OUTPUT_DIR}/systemd/vpn-worker@.service"
 cp "${DEPLOY_DIR}/templates/bin/vpn-systemctl.sh" "${OUTPUT_DIR}/bin/vpn-systemctl"
 chmod 755 "${OUTPUT_DIR}/bin/vpn-systemctl"
 if [[ "${VCP_NGINX_SSL:-0}" == "1" || "${VCP_NGINX_SSL:-0}" == "true" ]]; then

@@ -13,7 +13,6 @@ from panel.domain.value_objects.config_status import ConfigStatus
 from panel.domain.value_objects.protocol import VpnProtocolType
 from panel.infrastructure.persistence.models import AuditLogModel, VpnConfigModel, VpnConfigVersionModel
 from panel.infrastructure.persistence.repositories.vpn_config import VpnConfigRepository
-from panel.worker.main import _worker_ids
 
 
 @pytest.fixture
@@ -28,20 +27,6 @@ def mock_broker() -> AsyncMock:
     broker.publish_task.side_effect = publish_task
     broker.close = AsyncMock()
     return broker
-
-
-def test_worker_ids_single_instance(panel_settings) -> None:
-    settings = panel_settings.model_copy(
-        update={"worker": panel_settings.worker.model_copy(update={"worker_id": "panel-worker", "instances": 1})},
-    )
-    assert _worker_ids(settings) == ["panel-worker"]
-
-
-def test_worker_ids_multiple_instances(panel_settings) -> None:
-    settings = panel_settings.model_copy(
-        update={"worker": panel_settings.worker.model_copy(update={"worker_id": "panel-worker", "instances": 3})},
-    )
-    assert _worker_ids(settings) == ["panel-worker-1", "panel-worker-2", "panel-worker-3"]
 
 
 @pytest.mark.asyncio

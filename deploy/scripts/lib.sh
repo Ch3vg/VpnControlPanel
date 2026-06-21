@@ -94,3 +94,75 @@ fix_vpn_live_dirs() {
   find "${cert_dir}" -type f -exec chown root:"${VCP_PANEL_USER}" {} \; -exec chmod 640 {} \; 2>/dev/null || true
   find "${cert_dir}" -type l -exec chown -h root:"${VCP_PANEL_USER}" {} \; 2>/dev/null || true
 }
+
+worker_instances() {
+  local count="${VCP_WORKER_INSTANCES:-1}"
+  if ! [[ "${count}" =~ ^[0-9]+$ ]] || [[ "${count}" -lt 1 ]]; then
+    die "VCP_WORKER_INSTANCES must be a positive integer, got: ${count}"
+  fi
+  echo "${count}"
+}
+
+worker_for_each() {
+  local action="$1"
+  local count i
+  count="$(worker_instances)"
+  for ((i = 1; i <= count; i++)); do
+    systemctl "${action}" "vpn-worker@${i}"
+  done
+}
+
+install_worker_units() {
+  install -m 644 "${OUTPUT_DIR}/systemd/vpn-worker@.service" /etc/systemd/system/vpn-worker@.service
+  rm -f /etc/systemd/system/vpn-worker.service
+}
+
+sync_worker_units() {
+  local count i
+  count="$(worker_instances)"
+  install_worker_units
+  systemctl daemon-reload
+  for ((i = count + 1; i <= 32; i++)); do
+    systemctl stop "vpn-worker@${i}" 2>/dev/null || true
+    systemctl disable "vpn-worker@${i}" 2>/dev/null || true
+  done
+  for ((i = 1; i <= count; i++)); do
+    systemctl enable "vpn-worker@${i}"
+    systemctl restart "vpn-worker@${i}"
+  done
+  log "Worker units: vpn-worker@1..${count}"
+}
+
+stop_worker_units() {
+  local count i
+  count="$(worker_instances)"
+  for ((i = 1; i <= count; i++)); do
+    systemctl stop "vpn-worker@${i}" 2>/dev/null || true
+  done
+  systemctl stop vpn-worker 2>/dev/null || true
+}
+
+stop_all_worker_units() {
+  local i
+  for ((i = 1; i <= 32; i++)); do
+    systemctl stop "vpn-worker@${i}" 2>/dev/null || true
+  done
+  systemctl stop vpn-worker 2>/dev/null || true
+}
+
+disable_worker_units() {
+  local count i
+  count="$(worker_instances)"
+  for ((i = 1; i <= count; i++)); do
+    systemctl disable "vpn-worker@${i}" 2>/dev/null || true
+  done
+  systemctl disable vpn-worker 2>/dev/null || true
+}
+
+disable_all_worker_units() {
+  local i
+  for ((i = 1; i <= 32; i++)); do
+    systemctl disable "vpn-worker@${i}" 2>/dev/null || true
+  done
+  systemctl disable vpn-worker 2>/dev/null || true
+}

@@ -57,7 +57,7 @@ deploy/
 │   ├── systemd/
 │   │   ├── vpn-broker.service.in
 │   │   ├── vpn-api.service.in
-│   │   └── vpn-worker.service.in
+│   │   └── vpn-worker@.service.in
 │   ├── nginx/
 │   │   └── vpn-panel.conf.in
 │   └── sudoers/
@@ -85,6 +85,7 @@ make render    # → deploy/output/
 | `VCP_CERT_DIR` | Сертификаты grpc/hysteria | `/usr/local/etc/xray/certs` |
 | `VCP_PANEL_USER` | User API/broker | `vpn-panel` |
 | `VCP_WORKER_USER` | User worker | `vpn-worker` |
+| `VCP_WORKER_INSTANCES` | Число systemd-воркеров `vpn-worker@1..N` | `1` |
 | `VCP_DB_*` | PostgreSQL | см. env.example |
 | `VCP_JWT_SECRET` | JWT (≥32 символов) | auto `make secrets` |
 | `VCP_ENCRYPTION_KEY` | Шифрование БД | auto |
@@ -185,10 +186,11 @@ VPN_SYSTEMCTL_CMD="sudo -n /bin/systemctl"
 VPN_SYSTEMCTL_ACTION=restart
 ```
 
-В `vpn-worker.service`:
+В `vpn-worker@.service`:
 
 ```ini
-Environment="VPN_SYSTEMCTL_CMD=sudo -n /bin/systemctl"
+Environment=VPN_WORKER_INSTANCE=%i
+Environment="VPN_SYSTEMCTL_CMD=sudo -n /usr/local/bin/vpn-systemctl"
 Environment=VPN_SYSTEMCTL_ACTION=restart
 ```
 
@@ -210,7 +212,7 @@ Sudoers (`/etc/sudoers.d/vpn-worker`, `make install-sudoers`):
 ```bash
 sudo visudo -cf /etc/sudoers.d/vpn-worker
 sudo -u vpn-worker sudo -n /usr/local/bin/vpn-systemctl daemon-reload
-sudo systemctl restart vpn-worker
+sudo systemctl restart vpn-worker@1
 ```
 
 ---
@@ -275,18 +277,34 @@ Crontab (пример — каждое воскресенье в 04:00):
 
 ## Worker: параллелизм
 
-Один systemd-сервис `vpn-worker` = **один процесс**. Внутри него число параллельных pull-циклов задаётся в `panel.yaml`:
+Каждый воркер — **отдельный systemd instance** `vpn-worker@1`, `vpn-worker@2`, …
 
-```yaml
-worker:
-  worker_id: panel-worker-1
-  instances: 2   # два независимых worker_id: panel-worker-1-1, panel-worker-1-2
-  task_types:
-    - config.initialize
-    - config.regenerate
+Число задаётся в **`deploy/.env`**:
+
+```bash
+VCP_WORKER_INSTANCES=2
 ```
 
-После изменения `instances`: `sudo make setup-config && sudo systemctl restart vpn-worker`.
+Базовый `worker_id` для broker — из `panel.yaml` (`worker.worker_id`, по умолчанию `panel-worker-1`).  
+Instance `@3` получает id **`panel-worker-1-3`**.
+
+После изменения:
+
+```bash
+sudo make install-systemd
+# или полный update:
+sudo make update
+```
+
+Проверка:
+
+```bash
+make status
+systemctl status vpn-worker@1 vpn-worker@2
+sudo journalctl -u 'vpn-worker@*' -n 50 --no-pager
+```
+
+При уменьшении `VCP_WORKER_INSTANCES` лишние `@N` отключаются автоматически (`install-systemd` / `update`).
 
 ---
 
@@ -326,7 +344,7 @@ curl -s -X POST http://127.0.0.1:8000/auth/login \
 
 Чеклист:
 
-- [ ] `vpn-broker`, `vpn-api`, `vpn-worker` — `active`
+- [ ] `vpn-broker`, `vpn-api`, `vpn-worker@*` — `active`
 - [ ] Login в `/admin`
 - [ ] Создание конфига → `pending` → `active`
 - [ ] Файл в `VCP_VPN_CONFIGS_DIR/{uuid}/`
@@ -338,7 +356,7 @@ curl -s -X POST http://127.0.0.1:8000/auth/login \
 
 | Симптом | Решение |
 |---------|---------|
-| Конфиг в `pending` | `journalctl -u vpn-worker`; проверьте `broker.api_key` |
+| Конфиг в `pending` | `journalctl -u 'vpn-worker@*'`; проверьте `broker.api_key` |
 | `Job type reload is not applicable` | Xray не поддерживает reload — используйте `restart` в коде/sudoers (см. выше) |
 | Порт в UI ≠ порт Xray | Задайте `active_config_path` в `panel.yaml` = путь из unit VPN-сервиса; `make update` |
 | `sudo: command not allowed` / `COMMAND=reload` | В unit не в кавычках `VPN_SYSTEMCTL_CMD` → вызывается `sudo reload`. Исправьте unit, установите sudoers, см. ниже |
@@ -356,7 +374,7 @@ curl -s -X POST http://127.0.0.1:8000/auth/login \
 
 ```bash
 make logs
-journalctl -u vpn-worker -n 100 --no-pager
+journalctl -u 'vpn-worker@*' -n 100 --no-pager
 ```
 
 ---
@@ -385,10 +403,16 @@ sudo make uninstall-keep-db
 ### Вручную (если пути отличались от .env)
 
 ```bash
-sudo systemctl stop vpn-worker vpn-api vpn-broker
-sudo systemctl disable vpn-worker vpn-api vpn-broker
-sudo rm -f /etc/systemd/system/vpn-{worker,api,broker}.service
+sudo systemctl stop vpn-api vpn-broker
+sudo systemctl stop 'vpn-worker@*' 2>/dev/null || true
+sudo systemctl disable vpn-api vpn-broker
+sudo systemctl disable 'vpn-worker@*' 2>/dev/null || true
+sudo rm -f /etc/systemd/system/vpn-worker@.service
+sudo rm -f /etc/systemd/system/vpn-worker.service
+sudo rm -f /etc/systemd/system/vpn-api.service
+sudo rm -f /etc/systemd/system/vpn-broker.service
 sudo systemctl daemon-reload
+```
 
 sudo rm -f /etc/nginx/sites-enabled/vpn-panel.conf /etc/nginx/sites-available/vpn-panel.conf
 sudo nginx -t && sudo systemctl reload nginx

@@ -47,7 +47,5 @@ if [[ "${SKIP_NGINX}" -eq 0 ]]; then
   bash "${SCRIPT_DIR}/install-nginx.sh" || log "nginx update skipped — check TLS/config manually"
 fi
 
-systemctl restart vpn-broker vpn-api vpn-worker
-
 log "Update complete"
 log "Admin UI: http://${VCP_PANEL_DOMAIN}/admin"

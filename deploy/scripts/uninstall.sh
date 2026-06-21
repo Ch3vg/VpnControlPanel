@@ -28,10 +28,13 @@ require_root
 load_env
 
 log "Stopping services"
-systemctl stop vpn-worker vpn-api vpn-broker 2>/dev/null || true
-systemctl disable vpn-worker vpn-api vpn-broker 2>/dev/null || true
+stop_all_worker_units
+systemctl stop vpn-api vpn-broker 2>/dev/null || true
+disable_all_worker_units
+systemctl disable vpn-api vpn-broker 2>/dev/null || true
 
 log "Removing systemd units"
+rm -f /etc/systemd/system/vpn-worker@.service
 rm -f /etc/systemd/system/vpn-worker.service
 rm -f /etc/systemd/system/vpn-api.service
 rm -f /etc/systemd/system/vpn-broker.service

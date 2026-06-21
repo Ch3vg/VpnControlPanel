@@ -60,13 +60,13 @@ install-nginx: ## Install nginx site config (root)
 	sudo bash deploy/scripts/install-nginx.sh
 
 restart: ## Restart all panel services
-	sudo systemctl restart vpn-broker vpn-api vpn-worker
+	sudo bash deploy/scripts/panel-services.sh restart
 
 status: ## Show service status
-	systemctl status vpn-broker vpn-api vpn-worker --no-pager || true
+	bash deploy/scripts/panel-services.sh status
 
 logs: ## Tail service logs
-	sudo journalctl -u vpn-api -u vpn-worker -u vpn-broker -f
+	sudo bash deploy/scripts/panel-services.sh logs
 
 chmod-scripts: ## Mark deploy scripts executable (local dev only; not used on server)
 	chmod +x deploy/scripts/*.sh

@@ -9,10 +9,10 @@ bash "${SCRIPT_DIR}/render.sh"
 
 install -m 644 "${OUTPUT_DIR}/systemd/vpn-broker.service" /etc/systemd/system/vpn-broker.service
 install -m 644 "${OUTPUT_DIR}/systemd/vpn-api.service" /etc/systemd/system/vpn-api.service
-install -m 644 "${OUTPUT_DIR}/systemd/vpn-worker.service" /etc/systemd/system/vpn-worker.service
 
 systemctl daemon-reload
-systemctl enable vpn-broker vpn-api vpn-worker
-systemctl restart vpn-broker vpn-api vpn-worker
+systemctl enable vpn-broker vpn-api
+systemctl restart vpn-broker vpn-api
+sync_worker_units
 
 log "systemd units enabled and started"

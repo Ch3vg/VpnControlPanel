@@ -62,4 +62,4 @@ log "Admin UI: http://${VCP_PANEL_DOMAIN}/admin"
 if [[ "${VCP_NGINX_SSL:-0}" == "1" || "${VCP_NGINX_SSL:-0}" == "true" ]]; then
   log "Admin UI (TLS): https://${VCP_PANEL_DOMAIN}/admin"
 fi
-log "Check: systemctl status vpn-broker vpn-api vpn-worker"
+log "Check: make status"
