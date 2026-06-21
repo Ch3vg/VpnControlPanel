@@ -507,12 +507,12 @@ vpn:
       service_name: xray_reality
       config_filename: config.json
       inbound_tag: vless-reality-in
-      port_candidates: [443, 8443, 2053]
+      port_candidates: [8443, 2053]
     hysteria2:
       template_file: hysteria.server.yaml
       service_name: hysteria-server
       config_filename: config.yaml
-      port_candidates: [443, 8443]
+      port_candidates: [8443]
       cert_dir: /usr/local/etc/xray/certs
       cert_prefix: hysteria
 
