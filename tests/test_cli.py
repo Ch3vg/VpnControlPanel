@@ -14,6 +14,7 @@ import pytest
         ("broker_run.main",),
         ("panel.worker.main",),
         ("panel.cli.create_admin",),
+        ("panel.cli.regenerate_all_configs",),
     ],
 )
 def test_cli_help(module: str) -> None:
@@ -26,7 +27,10 @@ def test_cli_help(module: str) -> None:
     assert "usage:" in result.stdout.lower()
 
 
-@pytest.mark.parametrize("command", ["vpn-api", "vpn-broker", "vpn-worker", "vpn-create-admin"])
+@pytest.mark.parametrize(
+    "command",
+    ["vpn-api", "vpn-broker", "vpn-worker", "vpn-create-admin", "vpn-regenerate-all"],
+)
 def test_installed_entrypoint_help(command: str) -> None:
     exe = shutil.which(command)
     if exe is None:

@@ -5,13 +5,13 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 require_root
 load_env
 
-: "${VCP_ADMIN_USERNAME:=admin}"
+USERNAME="${1:-${VCP_ADMIN_USERNAME:-admin}}"
 
 run_create_admin() {
   local -a cmd=(
     "$(venv_bin vpn-create-admin)"
     --config "${VCP_CONFIG_DIR}/panel.yaml"
-    --username "${VCP_ADMIN_USERNAME}"
+    --username "${USERNAME}"
   )
   if [[ -n "${VCP_ADMIN_PASSWORD:-}" ]]; then
     cmd+=(--password "${VCP_ADMIN_PASSWORD}")
@@ -22,8 +22,8 @@ run_create_admin() {
 if [[ -n "${VCP_ADMIN_PASSWORD:-}" ]]; then
   run_create_admin
 else
-  log "Create admin user ${VCP_ADMIN_USERNAME} (interactive password prompt)"
+  log "Create admin user ${USERNAME} (interactive password prompt)"
   run_create_admin
 fi
 
-log "Admin user ready"
+log "Admin user ready: ${USERNAME}"

@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 .PHONY: help init-env secrets render deploy deploy-deps deploy-users deploy-db install-app \
-        setup-config migrate create-admin install-systemd install-sudoers install-nginx \
+        setup-config migrate create-admin regenerate-all install-systemd install-sudoers install-nginx \
         restart status logs chmod-scripts check-scripts uninstall uninstall-keep-db update
 
 help: ## Show available targets
@@ -41,8 +41,11 @@ setup-config: ## Render and install panel.yaml / broker.yaml (root)
 migrate: ## Run alembic upgrade head (root)
 	sudo bash deploy/scripts/migrate.sh
 
-create-admin: ## Create first admin user (root)
-	sudo bash deploy/scripts/create-admin.sh
+create-admin: ## Create admin user (sudo; optional: USERNAME=alice)
+	sudo bash deploy/scripts/create-admin.sh $(USERNAME)
+
+regenerate-all: ## Queue regenerate for all active configs (sudo)
+	sudo bash deploy/scripts/regenerate-all-configs.sh
 
 install-systemd: ## Install and start systemd units (root)
 	sudo bash deploy/scripts/install-systemd.sh

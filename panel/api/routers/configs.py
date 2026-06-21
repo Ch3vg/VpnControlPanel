@@ -12,6 +12,7 @@ from panel.api.schemas.configs import (
     ConfigStatusResponse,
     CreateConfigRequest,
     CreateConfigResponse,
+    RegenerateAllResponse,
     RegenerateConfigResponse,
     config_to_detail,
     config_to_list_item,
@@ -32,6 +33,7 @@ from panel.application.create_share_link import (
 from panel.application.share_expiration import InvalidShareRequest
 from panel.application.get_config_status import GetConfigStatusUseCase
 from panel.application.regenerate_config import ConfigNotRegeneratable, RegenerateConfigUseCase
+from panel.application.regenerate_all_configs import RegenerateAllConfigsUseCase
 from panel.domain.value_objects.protocol import VpnProtocolType
 from panel.infrastructure.broker import HttpBrokerClient
 from panel.infrastructure.persistence.repositories.share_token import ShareTokenRepository
@@ -80,6 +82,40 @@ async def create_config(
     finally:
         await broker.close()
     return CreateConfigResponse(task_id=result.task_id, config_id=str(result.config_id))
+
+
+@router.post(
+    "/regenerate-all",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=RegenerateAllResponse,
+)
+async def regenerate_all_configs(
+    user: CurrentUserDep,
+    settings: SettingsDep,
+    session: AsyncSession = Depends(get_db_session),
+) -> RegenerateAllResponse:
+    broker = HttpBrokerClient(settings.broker)
+    try:
+        use_case = RegenerateAllConfigsUseCase(
+            settings,
+            session,
+            VpnConfigRepository(session),
+            broker,
+            make_audit_service(settings, session),
+        )
+        result = await use_case.execute(user)
+    finally:
+        await broker.close()
+    return RegenerateAllResponse(
+        queued=[
+            {"config_id": str(item.config_id), "task_id": item.task_id}
+            for item in result.queued
+        ],
+        skipped=[
+            {"config_id": str(item.config_id), "reason": item.reason}
+            for item in result.skipped
+        ],
+    )
 
 
 @router.post(

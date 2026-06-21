@@ -116,7 +116,8 @@ make deploy-db         # PostgreSQL role + DB
 make install-app       # venv + pip install
 make setup-config      # /etc/vpn-control-panel/*.yaml
 make migrate           # alembic upgrade head
-make create-admin      # vpn-create-admin
+make create-admin      # vpn-create-admin (USERNAME=alice для доп. админов)
+make regenerate-all    # очередь regenerate для всех active конфигов
 make install-sudoers   # /etc/sudoers.d/vpn-worker
 make install-systemd   # enable + start units
 make install-nginx     # sites-available/vpn-panel.conf
@@ -223,6 +224,69 @@ sudo systemctl restart vpn-worker
 5. **Домен** (рекомендуется) для HTTPS
 
 Порты **8000** и **8001** слушают только `127.0.0.1` — наружу открыт **80** (nginx, без TLS по умолчанию).
+
+---
+
+## Администраторы
+
+Первый админ при деплое:
+
+```bash
+sudo make create-admin
+```
+
+Дополнительные админы (интерактивный пароль):
+
+```bash
+sudo make create-admin USERNAME=alice
+# или
+sudo bash deploy/scripts/create-admin.sh bob
+sudo -u vpn-panel /opt/vpn-control-panel/.venv/bin/vpn-create-admin \
+  --config /etc/vpn-control-panel/panel.yaml --username bob
+```
+
+---
+
+## Regenerate всех конфигов
+
+**UI:** кнопка «Regenerate all» на главной странице `/admin`.
+
+**API:** `POST /api/v1/configs/regenerate-all` (Bearer auth).
+
+**CLI / cron:**
+
+```bash
+sudo make regenerate-all
+# или напрямую:
+sudo bash deploy/scripts/regenerate-all-configs.sh
+```
+
+Crontab (пример — каждое воскресенье в 04:00):
+
+```cron
+0 4 * * 0 root cd /srv/VpnControlPanel && bash deploy/scripts/regenerate-all-configs.sh >> /var/log/vpn-panel-regenerate.log 2>&1
+```
+
+Пользователь для audit (`requested_by`): `VCP_CRON_ADMIN_USERNAME` в `deploy/.env` (по умолчанию `VCP_ADMIN_USERNAME`).
+
+Конфиги в статусе `pending` / `processing` пропускаются.
+
+---
+
+## Worker: параллелизм
+
+Один systemd-сервис `vpn-worker` = **один процесс**. Внутри него число параллельных pull-циклов задаётся в `panel.yaml`:
+
+```yaml
+worker:
+  worker_id: panel-worker-1
+  instances: 2   # два независимых worker_id: panel-worker-1-1, panel-worker-1-2
+  task_types:
+    - config.initialize
+    - config.regenerate
+```
+
+После изменения `instances`: `sudo make setup-config && sudo systemctl restart vpn-worker`.
 
 ---
 

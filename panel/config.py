@@ -74,6 +74,7 @@ class BrokerClientSettings(BaseModel):
 
 class WorkerSettings(BaseModel):
     worker_id: str = "panel-worker-1"
+    instances: int = Field(default=1, ge=1, le=32)
     task_types: list[str] = Field(
         default_factory=lambda: ["config.initialize", "config.regenerate"],
     )

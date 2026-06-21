@@ -91,6 +91,10 @@ export class ApiClient {
     return this.request("POST", `/api/v1/configs/${id}/regenerate`);
   }
 
+  regenerateAllConfigs() {
+    return this.request("POST", "/api/v1/configs/regenerate-all");
+  }
+
   deleteConfig(id) {
     return this.request("DELETE", `/api/v1/configs/${id}`);
   }

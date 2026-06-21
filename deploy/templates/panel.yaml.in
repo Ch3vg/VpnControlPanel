@@ -22,6 +22,7 @@ broker:
 
 worker:
   worker_id: "panel-worker-1"
+  instances: 1
   task_types:
     - config.initialize
     - config.regenerate

@@ -42,6 +42,7 @@ vpn-broker = "broker_run.main:main"
 vpn-api = "panel.api.main:main"
 vpn-worker = "panel.worker.main:main"
 vpn-create-admin = "panel.cli.create_admin:main"
+vpn-regenerate-all = "panel.cli.regenerate_all_configs:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

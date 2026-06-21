@@ -402,7 +402,10 @@ async function renderConfigs() {
             <option value="hysteria2">Hysteria2</option>
           </select>
         </div>
-        <span id="configs-count" class="muted"></span>
+        <div class="btn-row">
+          <button type="button" class="secondary" id="regenerate-all-btn">Regenerate all</button>
+          <span id="configs-count" class="muted"></span>
+        </div>
       </div>
       <div id="configs-body" class="muted">Загрузка…</div>
     </section>
@@ -433,6 +436,7 @@ async function renderConfigs() {
   });
   document.getElementById("create-btn").addEventListener("click", openCreateDialog);
   document.getElementById("protocol-filter").addEventListener("change", loadConfigsList);
+  document.getElementById("regenerate-all-btn")?.addEventListener("click", handleRegenerateAll);
   bindShareTtlSelect("share-all-ttl");
   document.getElementById("share-all-secure")?.addEventListener("click", () =>
     handleAllShare(true, "share-all-result"),
@@ -447,6 +451,29 @@ async function renderConfigs() {
 
   await Promise.all([loadSystemResources(), loadConfigsList(), loadShareLinksList("share-links-body")]);
   startResourcesPolling();
+}
+
+async function handleRegenerateAll() {
+  if (
+    !confirm(
+      "Поставить в очередь regenerate для всех активных конфигов? Занятые (pending/processing) будут пропущены.",
+    )
+  ) {
+    return;
+  }
+  const button = document.getElementById("regenerate-all-btn");
+  if (button) button.disabled = true;
+  try {
+    const result = await api.regenerateAllConfigs();
+    const queued = result.queued?.length ?? 0;
+    const skipped = result.skipped?.length ?? 0;
+    showToast(`Regenerate: в очереди ${queued}, пропущено ${skipped}`, "success");
+    await loadConfigsList();
+  } catch (error) {
+    showToast(errorMessage(error), "error");
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 async function loadConfigsList() {

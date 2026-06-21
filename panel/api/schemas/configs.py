@@ -63,6 +63,21 @@ class RegenerateConfigResponse(BaseModel):
     config_id: str
 
 
+class RegenerateAllItemResponse(BaseModel):
+    config_id: str
+    task_id: str
+
+
+class RegenerateAllSkippedResponse(BaseModel):
+    config_id: str
+    reason: str
+
+
+class RegenerateAllResponse(BaseModel):
+    queued: list[RegenerateAllItemResponse]
+    skipped: list[RegenerateAllSkippedResponse]
+
+
 class ConfigStatusResponse(BaseModel):
     config_id: str
     status: ConfigStatus
