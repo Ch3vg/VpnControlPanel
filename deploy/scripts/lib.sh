@@ -83,6 +83,7 @@ fix_vpn_live_dirs() {
   hysteria_dir="${VCP_HYSTERIA_CONFIG_DIR:-/usr/local/etc/hysteria}"
 
   install -d -m 770 -o root -g "${VCP_PANEL_USER}" "${xray_dir}" "${hysteria_dir}" "${cert_dir}"
+  install -d -m 770 -o root -g "${VCP_PANEL_USER}" "${xray_dir}/configs" "${hysteria_dir}/configs"
 
   find "${xray_dir}" -maxdepth 1 -type f \( -name '*.json' -o -name '*.yaml' \) \
     -exec chown root:"${VCP_PANEL_USER}" {} \; -exec chmod 660 {} \; 2>/dev/null || true

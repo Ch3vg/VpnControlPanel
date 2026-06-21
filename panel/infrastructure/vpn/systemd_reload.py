@@ -17,9 +17,16 @@ def _systemctl_action() -> str:
     return action
 
 
+def run_systemctl(action: str, service_name: str | None = None) -> None:
+    cmd = [*_systemctl_command(), action]
+    if service_name is not None:
+        cmd.append(service_name)
+    subprocess.run(cmd, check=True, timeout=30)
+
+
 def reload_service(service_name: str) -> None:
-    subprocess.run(
-        [*_systemctl_command(), _systemctl_action(), service_name],
-        check=True,
-        timeout=30,
-    )
+    run_systemctl(_systemctl_action(), service_name)
+
+
+def enable_service(service_name: str) -> None:
+    run_systemctl("enable", service_name)

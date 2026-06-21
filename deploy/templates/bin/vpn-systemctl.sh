@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Restricted systemctl wrapper for vpn-worker (per-config VPN units only).
+set -euo pipefail
+
+ACTION="${1:?action required}"
+SERVICE="${2:-}"
+PREFIX="${VPN_SERVICE_PREFIX:-vpn-}"
+
+case "${ACTION}" in
+  daemon-reload) ;;
+  enable|disable|restart|stop|start)
+    if [[ -z "${SERVICE}" || "${SERVICE}" != "${PREFIX}"* ]]; then
+      echo "Service name must start with ${PREFIX}" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "Unsupported action: ${ACTION}" >&2
+    exit 1
+    ;;
+esac
+
+if [[ "${ACTION}" == "daemon-reload" ]]; then
+  exec /bin/systemctl daemon-reload
+fi
+
+exec /bin/systemctl "${ACTION}" "${SERVICE}"

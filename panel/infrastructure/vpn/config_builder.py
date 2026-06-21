@@ -79,6 +79,8 @@ class ProfileConfigBuilder:
         profile: ConfigProfile,
         config_id: uuid.UUID,
         result: BuildResult,
+        *,
+        config_name: str = "",
     ) -> None:
         import time
 
@@ -94,10 +96,30 @@ class ProfileConfigBuilder:
         config_path = base_path / profile_settings.config_filename
         atomic_write(config_path, body)
 
-        if profile_settings.active_config_path is not None:
+        systemd = self._settings.systemd
+        if systemd.per_config:
+            from panel.infrastructure.vpn.systemd_unit import install_config_unit, live_config_path
+
+            live_path = live_config_path(
+                profile,
+                config_id,
+                profile_settings.config_filename,
+                systemd,
+            )
+            live_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write(live_path, body)
+            install_config_unit(
+                profile,
+                config_id,
+                config_filename=profile_settings.config_filename,
+                config_name=config_name,
+                settings=systemd,
+            )
+        elif profile_settings.active_config_path is not None:
             active_path = Path(profile_settings.active_config_path)
             active_path.parent.mkdir(parents=True, exist_ok=True)
             atomic_write(active_path, body)
+            reload_service(profile_settings.service_name)
 
         cert_dir = profile_settings.cert_dir
         if cert_dir is not None and result.extra_files:
@@ -114,7 +136,8 @@ class ProfileConfigBuilder:
                     stable.unlink()
                 stable.symlink_to(versioned.name)
 
-        reload_service(profile_settings.service_name)
+        if not systemd.per_config and profile_settings.active_config_path is None:
+            reload_service(profile_settings.service_name)
 
     def sensitive_fields(self, profile: ConfigProfile) -> list[str]:
         if profile is ConfigProfile.HYSTERIA2:

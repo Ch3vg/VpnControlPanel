@@ -113,6 +113,16 @@ class PathsSettings(BaseModel):
     templates: Path = Path("configs")
 
 
+class SystemdSettings(BaseModel):
+    per_config: bool = False
+    unit_dir: Path = Path("/etc/systemd/system")
+    service_prefix: str = "vpn"
+    xray_binary: Path = Path("/usr/local/bin/xray")
+    hysteria_binary: Path = Path("/usr/local/bin/hysteria")
+    xray_config_dir: Path = Path("/usr/local/etc/xray/configs")
+    hysteria_config_dir: Path = Path("/usr/local/etc/hysteria/configs")
+
+
 class VpnProfileSettings(BaseModel):
     template_file: str
     service_name: str
@@ -152,6 +162,7 @@ class PanelSettings(BaseModel):
     broker: BrokerClientSettings
     worker: WorkerSettings = Field(default_factory=WorkerSettings)
     paths: PathsSettings = Field(default_factory=PathsSettings)
+    systemd: SystemdSettings = Field(default_factory=SystemdSettings)
     rate_limit: RateLimitSettings
     audit: AuditSettings = Field(default_factory=AuditSettings)
     metrics: MetricsSettings = Field(default_factory=MetricsSettings)

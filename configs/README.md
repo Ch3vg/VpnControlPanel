@@ -16,8 +16,9 @@
 - подставляет port, keys, client UUID, shortIds (Reality) и т.д.;
 - обновляет `inboundTag` в `routing.rules`;
 - пишет итог в `{paths.configs}/{config_id}/` (архив версии);
-- если задан `active_config_path` в профиле — **тот же файл** в путь, откуда читает systemd (`xray`, `hysteria`).
+- при `systemd.per_config: true` — live-конфиг в `/usr/local/etc/xray/configs/{config_id}/` (или hysteria) и unit `vpn-{config_id}.service`;
+- при `systemd.per_config: false` и заданном `active_config_path` — в путь из профиля (legacy, один конфиг на профиль).
 
-**Важно:** `active_config_path` должен совпадать с `-config` в unit-файле VPN-сервиса. Иначе панель сохранит порт в БД, а Xray продолжит слушать старый конфиг — порты в UI и на сервере разойдутся.
+**Legacy:** `active_config_path` должен совпадать с `-config` в unit-файле VPN-сервиса.
 
 Перед production скопируйте шаблоны и настройте под свой сервер: outbounds, routing, `dest`/`serverNames`, пути к сертификатам, upstream-адреса. Значения в репозитории — **примеры** (TEST-NET IP, placeholder keys).

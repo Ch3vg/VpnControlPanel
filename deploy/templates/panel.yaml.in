@@ -30,6 +30,15 @@ paths:
   configs: "${VCP_VPN_CONFIGS_DIR}"
   templates: "${VCP_TEMPLATES_DIR}"
 
+systemd:
+  per_config: true
+  unit_dir: /etc/systemd/system
+  service_prefix: vpn
+  xray_binary: /usr/local/bin/xray
+  hysteria_binary: /usr/local/bin/hysteria
+  xray_config_dir: /usr/local/etc/xray/configs
+  hysteria_config_dir: /usr/local/etc/hysteria/configs
+
 rate_limit:
   login:
     max_attempts: 5
@@ -61,7 +70,6 @@ vpn:
       config_filename: config.json
       inbound_tag: vless-reality-in
       port_candidates: [443, 8443, 2053, 2083, 2096, 9443, 10443, 8444]
-      active_config_path: /usr/local/etc/xray/config_reality.json
     xray-grpc:
       template_file: config_grpc.json
       service_name: xray_grpc
@@ -70,7 +78,6 @@ vpn:
       port_candidates: [8443, 2053, 2083, 2096, 9443, 10443, 4433, 8444]
       cert_dir: ${VCP_CERT_DIR}
       cert_prefix: grpc
-      active_config_path: /usr/local/etc/xray/config_grpc.json
     xray-xhttp:
       template_file: config_xhttp.json
       service_name: xray_xhttp
@@ -79,14 +86,12 @@ vpn:
       port_candidates: [80, 8080, 8000, 8888, 8081, 8090, 3000, 5000, 9000]
       xhttp_hosts: [yandex.ru, gosuslugi.ru, kremlin.ru, rzd.ru]
       xhttp_paths: [/search, /assets, /api, /download, /news, /login]
-      active_config_path: /usr/local/etc/xray/config_xhttp.json
     xray-client-in:
       template_file: config_client_in.json
       service_name: xray_client
       config_filename: config.json
       inbound_tag: client-in
       port_candidates: [51820]
-      active_config_path: /usr/local/etc/xray/config_client_in.json
     hysteria2:
       template_file: hysteria.server.yaml
       service_name: hysteria-server
@@ -95,7 +100,6 @@ vpn:
       port_candidates: [443, 8443, 3478, 8800, 1935, 8000, 8080, 53, 123, 5000]
       cert_dir: ${VCP_CERT_DIR}
       cert_prefix: hysteria
-      active_config_path: /usr/local/etc/hysteria/config.yaml
 
 telegram:
   enabled: false

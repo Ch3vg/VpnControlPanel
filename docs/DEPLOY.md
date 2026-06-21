@@ -193,17 +193,20 @@ Environment=VPN_SYSTEMCTL_ACTION=restart
 
 Sudoers (`/etc/sudoers.d/vpn-worker`, `make install-sudoers`):
 
-- `xray_reality`, `xray_grpc`, `xray_xhttp`, `xray_client`
-- `hysteria-server`
+- `/usr/local/bin/vpn-systemctl` — per-config units `vpn-{config_id}` (`systemd.per_config: true`)
+- Legacy: `xray_reality`, `xray_grpc`, … — если `systemd.per_config: false`
 
-Имена должны совпадать с `vpn.profiles.*.service_name` в `panel.yaml`.
+При `systemd.per_config: true` воркер при create/regenerate:
+
+1. Пишет live-конфиг в `/usr/local/etc/xray/configs/{config_id}/` или `/usr/local/etc/hysteria/configs/{config_id}/`
+2. Создаёт `/etc/systemd/system/vpn-{config_id}.service`
+3. Выполняет `daemon-reload`, `enable`, `restart`
 
 Проверка:
 
 ```bash
 sudo visudo -cf /etc/sudoers.d/vpn-worker
-sudo -u vpn-worker sudo -n /bin/systemctl restart xray_reality
-sudo systemctl daemon-reload
+sudo -u vpn-worker sudo -n /usr/local/bin/vpn-systemctl daemon-reload
 sudo systemctl restart vpn-worker
 ```
 

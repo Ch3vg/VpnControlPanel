@@ -52,6 +52,15 @@ web:
   enabled: true
   mount_path: /admin
 
+systemd:
+  per_config: true
+  unit_dir: /etc/systemd/system
+  service_prefix: vpn
+  xray_binary: /usr/local/bin/xray
+  hysteria_binary: /usr/local/bin/hysteria
+  xray_config_dir: /usr/local/etc/xray/configs
+  hysteria_config_dir: /usr/local/etc/hysteria/configs
+
 vpn:
   public_host: "vpn.example.com"
   profiles:

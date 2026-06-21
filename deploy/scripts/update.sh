@@ -38,6 +38,7 @@ bash "${SCRIPT_DIR}/setup-config.sh"
 bash "${SCRIPT_DIR}/migrate.sh"
 bash "${SCRIPT_DIR}/fix-config-perms.sh"
 bash "${SCRIPT_DIR}/install-sudoers.sh"
+bash "${SCRIPT_DIR}/install-vpn-systemctl.sh"
 bash "${SCRIPT_DIR}/install-systemd.sh"
 
 if [[ "${SKIP_NGINX}" -eq 0 ]]; then

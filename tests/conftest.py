@@ -44,6 +44,7 @@ def panel_config_dict(tmp_path: Path) -> dict:
             "configs": str(tmp_path / "vpn-configs"),
             "templates": str(templates_path_from_repo()),
         },
+        "systemd": {"per_config": False},
         "rate_limit": {
             "login": {"max_attempts": 5, "window_seconds": 900},
             "share": {"max_requests": 30, "window_seconds": 60},

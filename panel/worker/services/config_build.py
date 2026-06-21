@@ -48,7 +48,7 @@ async def build_and_persist_version(
     result = builder.build(profile, name=name, previous=previous, exclude_ports=used_ports)
     profile_settings = ctx.settings.vpn.profiles[profile.value]
     result.port = listening_port(profile, result.config_data, profile_settings)
-    builder.write_files(profile, config_id, result)
+    builder.write_files(profile, config_id, result, config_name=name)
 
     config_data_stored = encrypt_config_data_fields(
         result.config_data,
