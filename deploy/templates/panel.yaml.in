@@ -66,6 +66,9 @@ web:
 
 vpn:
   public_host: "${VCP_PUBLIC_HOST}"
+  outbound_secrets:
+    grpc-out:
+      user_id: "${VCP_GRPC_OUT_USER_ID}"
   profiles:
     xray-reality:
       template_file: config_reality.json

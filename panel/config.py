@@ -145,8 +145,15 @@ class VpnServiceSettings(BaseModel):
     config_filename: str
 
 
+class OutboundVlessSettings(BaseModel):
+    """Static VLESS credentials for an outbound tag (e.g. grpc-out upstream)."""
+
+    user_id: str = ""
+
+
 class VpnSettings(BaseModel):
     public_host: str = "127.0.0.1"
+    outbound_secrets: dict[str, OutboundVlessSettings] = Field(default_factory=dict)
     profiles: dict[str, VpnProfileSettings] = Field(default_factory=dict)
     xray: VpnServiceSettings | None = None
     hysteria2: VpnServiceSettings | None = None

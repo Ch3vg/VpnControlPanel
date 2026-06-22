@@ -16,7 +16,12 @@ from panel.infrastructure.filesystem.writer import atomic_write
 from panel.infrastructure.vpn.crypto_utils import generate_self_signed_cert, to_base64
 from panel.infrastructure.vpn.port_picker import pick_port
 from panel.infrastructure.vpn.client_uri import build_share_uris
-from panel.infrastructure.vpn.template_loader import find_inbound, load_template, set_client_id
+from panel.infrastructure.vpn.template_loader import (
+    apply_outbound_secrets,
+    find_inbound,
+    load_template,
+    set_client_id,
+)
 from panel.infrastructure.vpn.systemd_reload import reload_service
 from panel.infrastructure.vpn.service_ready import wait_for_service_ready
 
@@ -67,27 +72,31 @@ class ProfileConfigBuilder:
         config = load_template(template_path)
 
         if profile is ConfigProfile.XRAY_REALITY:
-            return self._build_xray_reality(
+            result = self._build_xray_reality(
                 config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
             )
-        if profile is ConfigProfile.XRAY_GRPC:
-            return self._build_xray_grpc(
+        elif profile is ConfigProfile.XRAY_GRPC:
+            result = self._build_xray_grpc(
                 config, profile_settings, previous=previous, exclude_ports=exclude_ports,
                 preferred_port=preferred_port, preferred_grpc_sni=preferred_grpc_sni,
             )
-        if profile is ConfigProfile.XRAY_XHTTP:
-            return self._build_xray_xhttp(
+        elif profile is ConfigProfile.XRAY_XHTTP:
+            result = self._build_xray_xhttp(
                 config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
             )
-        if profile is ConfigProfile.XRAY_CLIENT_IN:
-            return self._build_xray_client_in(
+        elif profile is ConfigProfile.XRAY_CLIENT_IN:
+            result = self._build_xray_client_in(
                 config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
             )
-        if profile is ConfigProfile.HYSTERIA2:
-            return self._build_hysteria2(
+        elif profile is ConfigProfile.HYSTERIA2:
+            result = self._build_hysteria2(
                 config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
             )
-        raise ValueError(f"Unsupported profile: {profile}")
+        else:
+            raise ValueError(f"Unsupported profile: {profile}")
+
+        apply_outbound_secrets(result.config_data, self._settings.vpn.outbound_secrets)
+        return result
 
     def write_files(
         self,

@@ -22,3 +22,16 @@
 **Legacy:** `active_config_path` должен совпадать с `-config` в unit-файле VPN-сервиса.
 
 Перед production скопируйте шаблоны и настройте под свой сервер: outbounds, routing, `dest`/`serverNames`, пути к сертификатам, upstream-адреса. Значения в репозитории — **примеры** (TEST-NET IP, placeholder keys).
+
+### Секреты outbound (grpc-out и др.)
+
+UUID и прочие credentials для **outbound**-цепочки не меняются при create/regenerate inbound. Они задаются один раз в `panel.yaml`:
+
+```yaml
+vpn:
+  outbound_secrets:
+    grpc-out:
+      user_id: "<vless-uuid-на-upstream>"
+```
+
+При деплое — через `deploy/.env` → `VCP_GRPC_OUT_USER_ID` (подставляется в шаблон `panel.yaml.in`). Файл `panel.yaml` на сервере (`chmod 640`), в git не коммитится. Inbound `clients[].id` по-прежнему генерируется динамически для каждого конфига.

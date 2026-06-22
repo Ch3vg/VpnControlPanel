@@ -66,6 +66,9 @@ systemd:
 
 vpn:
   public_host: "vpn.example.com"
+  outbound_secrets:
+    grpc-out:
+      user_id: "00000000-0000-4000-8000-000000000099"
   profiles:
     xray-reality:
       template_file: config_reality.json
