@@ -20,6 +20,16 @@ def default_vpn_profiles(*, cert_dir: str = "/usr/local/etc/xray/certs") -> dict
             "port_candidates": [8443, 2053, 2083, 2096, 9443, 10443, 4433, 8444],
             "cert_dir": cert_dir,
             "cert_prefix": "grpc",
+            "grpc_sni_hosts": [
+                "ya.ru",
+                "gosuslugi.ru",
+                "www.microsoft.com",
+                "vk.com",
+                "kremlin.ru",
+                "pochta.ru",
+                "government.ru",
+                "rzd.ru",
+            ],
         },
         "xray-xhttp": {
             "template_file": "config_xhttp.json",

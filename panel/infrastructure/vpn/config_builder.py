@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import secrets
 import uuid
 from dataclasses import dataclass, field
@@ -59,6 +60,7 @@ class ProfileConfigBuilder:
         previous: PreviousSecrets | None = None,
         exclude_ports: set[int] | None = None,
         preferred_port: int | None = None,
+        preferred_grpc_sni: str | None = None,
     ) -> BuildResult:
         profile_settings = self._settings.vpn.profiles[profile.value]
         template_path = self._resolve_template_path(profile_settings.template_file)
@@ -70,7 +72,8 @@ class ProfileConfigBuilder:
             )
         if profile is ConfigProfile.XRAY_GRPC:
             return self._build_xray_grpc(
-                config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
+                config, profile_settings, previous=previous, exclude_ports=exclude_ports,
+                preferred_port=preferred_port, preferred_grpc_sni=preferred_grpc_sni,
             )
         if profile is ConfigProfile.XRAY_XHTTP:
             return self._build_xray_xhttp(
@@ -239,6 +242,7 @@ class ProfileConfigBuilder:
         previous: PreviousSecrets | None,
         exclude_ports: set[int] | None,
         preferred_port: int | None,
+        preferred_grpc_sni: str | None = None,
     ) -> BuildResult:
         inbound_tag = profile.inbound_tag
         port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
@@ -250,6 +254,13 @@ class ProfileConfigBuilder:
         else:
             client_id = str(uuid.uuid4())
         set_client_id(config, client_id, inbound_tag)
+
+        tls = inbound["streamSettings"]["tlsSettings"]
+        if profile.grpc_sni_hosts:
+            if preferred_grpc_sni and preferred_grpc_sni in profile.grpc_sni_hosts:
+                tls["serverName"] = preferred_grpc_sni
+            else:
+                tls["serverName"] = random.choice(profile.grpc_sni_hosts)
 
         private_pem, cert_pem, fingerprint = generate_self_signed_cert()
         cert_dir = profile.cert_dir or Path("/usr/local/etc/xray/certs")
@@ -279,8 +290,6 @@ class ProfileConfigBuilder:
         exclude_ports: set[int] | None,
         preferred_port: int | None,
     ) -> BuildResult:
-        import random
-
         inbound_tag = profile.inbound_tag
         port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
         inbound = find_inbound(config, inbound_tag)

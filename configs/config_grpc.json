@@ -24,7 +24,7 @@
         },
         "tlsSettings": {
           "fingerprint": "firefox",
-          "serverName": "vpn.example.com",
+          "serverName": "",
           "certificates": [
             {
               "certificateFile": "/usr/local/etc/xray/certs/grpc-cert.pem",

@@ -29,6 +29,8 @@ async def build_and_persist_version(
     previous = None
     previous_port: int | None = None
     snapshot = None
+    config_plain: dict[str, Any] | None = None
+    profile_settings = ctx.settings.vpn.profiles[profile.value]
     if target_version > 1:
         snapshot = await repo.get_version_snapshot(config_id, target_version - 1)
         if snapshot is not None:
@@ -49,7 +51,18 @@ async def build_and_persist_version(
                 public_key=snapshot.public_key,
             )
 
-    profile_settings = ctx.settings.vpn.profiles[profile.value]
+    preferred_grpc_sni: str | None = None
+    if snapshot is not None and profile is ConfigProfile.XRAY_GRPC and config_plain is not None:
+        inbound_tag = profile_settings.inbound_tag
+        for inbound in config_plain.get("inbounds", []):
+            if inbound.get("tag") == inbound_tag:
+                preferred_grpc_sni = (
+                    inbound.get("streamSettings", {})
+                    .get("tlsSettings", {})
+                    .get("serverName")
+                )
+                break
+
     used_ports = await repo.list_used_ports(exclude_config_id=config_id)
     reuse_port = previous_port is not None and previous_port in profile_settings.port_candidates
 
@@ -70,6 +83,7 @@ async def build_and_persist_version(
         previous=previous,
         exclude_ports=used_ports,
         preferred_port=previous_port,
+        preferred_grpc_sni=preferred_grpc_sni,
     )
     result.port = listening_port(profile, result.config_data, profile_settings)
     await asyncio.to_thread(

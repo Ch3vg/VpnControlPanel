@@ -51,6 +51,9 @@ def test_xhttp_share_uri_format(panel_settings) -> None:
 def test_grpc_share_uri_format(panel_settings) -> None:
     builder = ProfileConfigBuilder(panel_settings)
     result = builder.build(ConfigProfile.XRAY_GRPC, name="ignored")
+    inbound = result.config_data["inbounds"][0]
+    sni = inbound["streamSettings"]["tlsSettings"]["serverName"]
+    assert sni in panel_settings.vpn.profiles["xray-grpc"].grpc_sni_hosts
     uris = build_share_uris(
         ConfigProfile.XRAY_GRPC,
         result.config_data,
@@ -62,12 +65,32 @@ def test_grpc_share_uri_format(panel_settings) -> None:
     uri = uris[0]
     assert "type=grpc" in uri
     assert "security=tls" in uri
+    assert f"sni={sni}" in uri
     assert "serviceName=" in uri
     assert "fingerprint=randomized" in uri
     assert "pcs=" in uri
     assert "insecure=0" in uri
     assert "fragment=true" in uri
     assert uri.endswith("#gRPC-Dynamic")
+
+
+def test_grpc_sni_preserved_on_regenerate(panel_settings, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "panel.infrastructure.vpn.config_builder.random.choice",
+        lambda hosts: "gosuslugi.ru",
+    )
+    builder = ProfileConfigBuilder(panel_settings)
+    first = builder.build(ConfigProfile.XRAY_GRPC, name="ignored")
+    sni = first.config_data["inbounds"][0]["streamSettings"]["tlsSettings"]["serverName"]
+    assert sni == "gosuslugi.ru"
+
+    second = builder.build(
+        ConfigProfile.XRAY_GRPC,
+        name="ignored",
+        preferred_grpc_sni=sni,
+    )
+    second_sni = second.config_data["inbounds"][0]["streamSettings"]["tlsSettings"]["serverName"]
+    assert second_sni == sni
 
 
 def test_hysteria2_share_uri_insecure(panel_settings) -> None:

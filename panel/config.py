@@ -137,6 +137,7 @@ class VpnProfileSettings(BaseModel):
     cert_prefix: str | None = None
     xhttp_hosts: list[str] = Field(default_factory=list)
     xhttp_paths: list[str] = Field(default_factory=list)
+    grpc_sni_hosts: list[str] = Field(default_factory=list)
 
 
 class VpnServiceSettings(BaseModel):
