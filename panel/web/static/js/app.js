@@ -5,7 +5,6 @@ const PROFILES = {
     { value: "xray-reality", label: "Xray Reality" },
     { value: "xray-grpc", label: "Xray gRPC" },
     { value: "xray-xhttp", label: "Xray xHTTP" },
-    { value: "xray-client-in", label: "Xray client-in" },
   ],
   hysteria2: [{ value: "hysteria2", label: "Hysteria2" }],
 };

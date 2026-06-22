@@ -66,9 +66,6 @@ web:
 
 vpn:
   public_host: "${VCP_PUBLIC_HOST}"
-  outbound_secrets:
-    grpc-out:
-      user_id: "${VCP_GRPC_OUT_USER_ID}"
   profiles:
     xray-reality:
       template_file: config_reality.json
@@ -93,12 +90,6 @@ vpn:
       port_candidates: [8080, 8000, 8888, 8081, 8090, 3000, 5000, 9000]
       xhttp_hosts: [yandex.ru, gosuslugi.ru, kremlin.ru, rzd.ru]
       xhttp_paths: [/search, /assets, /api, /download, /news, /login]
-    xray-client-in:
-      template_file: config_client_in.json
-      service_name: xray_client
-      config_filename: config.json
-      inbound_tag: client-in
-      port_candidates: [51820]
     hysteria2:
       template_file: hysteria.server.yaml
       service_name: hysteria-server

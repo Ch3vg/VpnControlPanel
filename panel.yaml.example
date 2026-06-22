@@ -66,9 +66,6 @@ systemd:
 
 vpn:
   public_host: "vpn.example.com"
-  outbound_secrets:
-    grpc-out:
-      user_id: "00000000-0000-4000-8000-000000000099"
   profiles:
     xray-reality:
       template_file: config_reality.json
@@ -96,13 +93,6 @@ vpn:
       xhttp_hosts: [yandex.ru, gosuslugi.ru, kremlin.ru, rzd.ru]
       xhttp_paths: [/search, /assets, /api, /download, /news, /login]
       active_config_path: /usr/local/etc/xray/config_xhttp.json
-    xray-client-in:
-      template_file: config_client_in.json
-      service_name: xray_client
-      config_filename: config.json
-      inbound_tag: client-in
-      port_candidates: [51820]
-      active_config_path: /usr/local/etc/xray/config_client_in.json
     hysteria2:
       template_file: hysteria.server.yaml
       service_name: hysteria-server

@@ -40,13 +40,6 @@ def default_vpn_profiles(*, cert_dir: str = "/usr/local/etc/xray/certs") -> dict
             "xhttp_hosts": ["yandex.ru", "gosuslugi.ru", "kremlin.ru", "rzd.ru"],
             "xhttp_paths": ["/search", "/assets", "/api", "/download", "/news", "/login"],
         },
-        "xray-client-in": {
-            "template_file": "config_client_in.json",
-            "service_name": "xray",
-            "config_filename": "config.json",
-            "inbound_tag": "client-in",
-            "port_candidates": [51820],
-        },
         "hysteria2": {
             "template_file": "hysteria.server.yaml",
             "service_name": "hysteria-server",

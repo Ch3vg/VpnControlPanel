@@ -13,7 +13,6 @@ _STARTUP_PATTERNS: dict[ConfigProfile, re.Pattern[str]] = {
     ConfigProfile.XRAY_REALITY: re.compile(r"\bstarted\b", re.IGNORECASE),
     ConfigProfile.XRAY_GRPC: re.compile(r"\bstarted\b", re.IGNORECASE),
     ConfigProfile.XRAY_XHTTP: re.compile(r"\bstarted\b", re.IGNORECASE),
-    ConfigProfile.XRAY_CLIENT_IN: re.compile(r"\bstarted\b", re.IGNORECASE),
     ConfigProfile.HYSTERIA2: re.compile(r"listening|server up|started", re.IGNORECASE),
 }
 

@@ -7,7 +7,6 @@ class ConfigProfile(StrEnum):
     XRAY_REALITY = "xray-reality"
     XRAY_GRPC = "xray-grpc"
     XRAY_XHTTP = "xray-xhttp"
-    XRAY_CLIENT_IN = "xray-client-in"
     HYSTERIA2 = "hysteria2"
 
     @classmethod

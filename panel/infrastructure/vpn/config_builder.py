@@ -16,12 +16,7 @@ from panel.infrastructure.filesystem.writer import atomic_write
 from panel.infrastructure.vpn.crypto_utils import generate_self_signed_cert, to_base64
 from panel.infrastructure.vpn.port_picker import pick_port
 from panel.infrastructure.vpn.client_uri import build_share_uris
-from panel.infrastructure.vpn.template_loader import (
-    apply_outbound_secrets,
-    find_inbound,
-    load_template,
-    set_client_id,
-)
+from panel.infrastructure.vpn.template_loader import find_inbound, load_template, set_client_id
 from panel.infrastructure.vpn.systemd_reload import reload_service
 from panel.infrastructure.vpn.service_ready import wait_for_service_ready
 
@@ -84,10 +79,6 @@ class ProfileConfigBuilder:
             result = self._build_xray_xhttp(
                 config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
             )
-        elif profile is ConfigProfile.XRAY_CLIENT_IN:
-            result = self._build_xray_client_in(
-                config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
-            )
         elif profile is ConfigProfile.HYSTERIA2:
             result = self._build_hysteria2(
                 config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
@@ -95,7 +86,6 @@ class ProfileConfigBuilder:
         else:
             raise ValueError(f"Unsupported profile: {profile}")
 
-        apply_outbound_secrets(result.config_data, self._settings.vpn.outbound_secrets)
         return result
 
     def write_files(
@@ -322,26 +312,6 @@ class ProfileConfigBuilder:
             private_key="",
             public_key="",
             client_id=client_id,
-        )
-
-    def _build_xray_client_in(
-        self,
-        config: dict[str, Any],
-        profile: VpnProfileSettings,
-        *,
-        previous: PreviousSecrets | None,
-        exclude_ports: set[int] | None,
-        preferred_port: int | None,
-    ) -> BuildResult:
-        inbound_tag = profile.inbound_tag
-        port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
-        inbound = find_inbound(config, inbound_tag)
-        inbound["port"] = port
-        return BuildResult(
-            config_data=config,
-            port=port,
-            private_key="",
-            public_key="",
         )
 
     def _build_hysteria2(

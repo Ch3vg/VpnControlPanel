@@ -11,7 +11,6 @@ _SHARE_LABELS: dict[ConfigProfile, str] = {
     ConfigProfile.XRAY_XHTTP: "XHTTP-Dynamic",
     ConfigProfile.XRAY_GRPC: "gRPC-Dynamic",
     ConfigProfile.HYSTERIA2: "Hysteria2-Dynamic",
-    ConfigProfile.XRAY_CLIENT_IN: "Client-In",
 }
 
 

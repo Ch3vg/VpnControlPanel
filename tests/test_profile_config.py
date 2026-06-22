@@ -22,6 +22,10 @@ def test_xray_reality_template_build(panel_settings) -> None:
     assert result.client_id
     assert result.config_data["routing"]["rules"][-1]["inboundTag"] == ["vless-reality-in"]
 
+    outbound_tags = {o["tag"] for o in result.config_data["outbounds"]}
+    assert outbound_tags == {"direct-out", "client-in-loop"}
+    assert result.config_data["routing"]["rules"][-1]["outboundTag"] == "client-in-loop"
+
 
 def test_xray_reality_regenerate_keeps_keys(panel_settings) -> None:
     builder = ProfileConfigBuilder(panel_settings)

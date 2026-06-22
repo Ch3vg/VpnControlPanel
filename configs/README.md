@@ -5,33 +5,20 @@
 | Файл | Профиль | Описание |
 |------|---------|----------|
 | `config_reality.json` | `xray-reality` | VLESS + Reality inbound |
-| `config_grpc.json` | `xray-grpc` | VLESS + gRPC/TLS, cert/key — файлы на диске |
+| `config_grpc.json` | `xray-grpc` | VLESS + gRPC/TLS |
 | `config_xhttp.json` | `xray-xhttp` | VLESS + xHTTP |
-| `config_client_in.json` | `xray-client-in` | SOCKS inbound для цепочки |
 | `hysteria.server.yaml` | `hysteria2` | Hysteria2 server |
+
+Динамические шаблоны (reality / grpc / xhttp) содержат inbound панели и outbound `client-in-loop` — SOCKS на `127.0.0.1:51820`. Локальная петля с балансировщиком и upstream-outbound **настраивается на сервере вручную**, панель ею не управляет.
 
 При **create/regenerate** воркер:
 
 - загружает шаблон;
-- подставляет port, keys, client UUID, shortIds (Reality) и т.д.;
-- обновляет `inboundTag` в `routing.rules`;
-- пишет итог в `{paths.configs}/{config_id}/` (архив версии);
-- при `systemd.per_config: true` — live-конфиг в `/usr/local/etc/xray/configs/{config_id}/` (или hysteria) и unit `vpn-{config_id}.service`;
-- при `systemd.per_config: false` и заданном `active_config_path` — в путь из профиля (legacy, один конфиг на профиль).
+- подставляет port, keys, client UUID, shortIds (Reality), gRPC SNI и т.д.;
+- пишет итог в `{paths.configs}/{config_id}/`;
+- при `systemd.per_config: true` — live-конфиг в `/usr/local/etc/xray/configs/{config_id}/` и unit `vpn-{config_id}.service`;
+- при `systemd.per_config: false` и заданном `active_config_path` — в путь из профиля (legacy).
 
 **Legacy:** `active_config_path` должен совпадать с `-config` в unit-файле VPN-сервиса.
 
-Перед production скопируйте шаблоны и настройте под свой сервер: outbounds, routing, `dest`/`serverNames`, пути к сертификатам, upstream-адреса. Значения в репозитории — **примеры** (TEST-NET IP, placeholder keys).
-
-### Секреты outbound (grpc-out и др.)
-
-UUID и прочие credentials для **outbound**-цепочки не меняются при create/regenerate inbound. Они задаются один раз в `panel.yaml`:
-
-```yaml
-vpn:
-  outbound_secrets:
-    grpc-out:
-      user_id: "<vless-uuid-на-upstream>"
-```
-
-При деплое — через `deploy/.env` → `VCP_GRPC_OUT_USER_ID` (подставляется в шаблон `panel.yaml.in`). Файл `panel.yaml` на сервере (`chmod 640`), в git не коммитится. Inbound `clients[].id` по-прежнему генерируется динамически для каждого конфига.
+Перед production настройте шаблоны под свой сервер: routing, `dest`/`serverNames`, пути к сертификатам, порт SOCKS-петли в `client-in-loop` (если не 51820).

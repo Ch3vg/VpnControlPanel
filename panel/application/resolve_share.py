@@ -24,7 +24,6 @@ _PROFILE_ORDER = {
     ConfigProfile.XRAY_XHTTP: 1,
     ConfigProfile.XRAY_GRPC: 2,
     ConfigProfile.HYSTERIA2: 3,
-    ConfigProfile.XRAY_CLIENT_IN: 4,
 }
 
 
