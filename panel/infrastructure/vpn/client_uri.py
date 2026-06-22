@@ -165,7 +165,7 @@ def _build_hysteria2_uri(
 ) -> str:
     port = int(str(config_data["listen"]).lstrip(":"))
     password = config_data["auth"]["password"]
-    sni = config_data.get("sni") or config_data.get("tls", {}).get("sni") or "ya.ru"
+    sni = config_data.get("sni") or config_data.get("tls", {}).get("sni") or "vpn-panel"
     params = [f"sni={quote(str(sni), safe='')}"]
     if secure:
         pin = _pin_hex(cert_fingerprint)
