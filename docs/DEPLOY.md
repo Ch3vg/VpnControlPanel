@@ -93,6 +93,10 @@ make render    # → deploy/output/
 | `VCP_TASK_BROKER_WHL` | Путь к wheel | **обязательно** |
 | `VCP_PUBLIC_HOST` | IP/домен VPN-сервера | |
 | `VCP_PANEL_DOMAIN` | Домен панели (nginx) | |
+| `VCP_CONNECTIVITY_PROBE_ENABLED` | Реальная проверка VPN через клиент | `true` |
+| `VCP_CONNECTIVITY_PROBE_TIMEOUT_SECONDS` | Таймаут probe (сек) | `12` |
+| `VCP_CONNECTIVITY_PROBE_CACHE_SECONDS` | Кэш результата probe (сек) | `60` |
+| `VCP_CONNECTIVITY_PROBE_URL` | URL для curl через SOCKS | Cloudflare trace |
 | `VCP_NGINX_SSL` | HTTPS :443 (`1`) или только HTTP :80 (`0`) | `0` |
 | `VCP_ADMIN_USERNAME` | Первый админ | `admin` |
 
@@ -328,9 +332,11 @@ sudo make update
 sudo make update-quick
 ```
 
-`make update` выполняет: `git pull`, `pip install`, перерендер `panel.yaml`, миграции, systemd/sudoers, restart.
+`make update` выполняет: `git pull`, `pip install`, перерендер `panel.yaml` из `deploy/.env`, миграции, systemd/sudoers, restart.
 
-> **Не правьте файлы репозитория на сервере.** Конфиги панели — в `VCP_CONFIG_DIR` (`panel.yaml`, `broker.yaml`), не в `deploy/scripts/`. Скрипты запускаются через `bash deploy/scripts/...`, без `chmod` в tracked-файлах.
+> **Не правьте `panel.yaml` вручную** — при каждом `make update` он пересоздаётся из шаблона `deploy/templates/panel.yaml.in` и переменных `deploy/.env`. Настройки VPN, probe, `public_host` и секреты — только в `.env`.
+>
+> **Не правьте файлы репозитория на сервере.** Скрипты запускаются через `bash deploy/scripts/...`, без `chmod` в tracked-файлах.
 
 ### Вручную
 

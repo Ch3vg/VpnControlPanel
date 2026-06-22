@@ -66,6 +66,10 @@ web:
 
 vpn:
   public_host: "${VCP_PUBLIC_HOST}"
+  connectivity_probe_enabled: ${VCP_CONNECTIVITY_PROBE_ENABLED}
+  connectivity_probe_timeout_seconds: ${VCP_CONNECTIVITY_PROBE_TIMEOUT_SECONDS}
+  connectivity_probe_cache_seconds: ${VCP_CONNECTIVITY_PROBE_CACHE_SECONDS}
+  connectivity_probe_url: "${VCP_CONNECTIVITY_PROBE_URL}"
   profiles:
     xray-reality:
       template_file: config_reality.json
