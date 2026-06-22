@@ -10,6 +10,7 @@ from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.infrastructure.crypto.config_data import decrypt_config_data_fields, encrypt_config_data_fields
 from panel.infrastructure.persistence.repositories.vpn_config import VpnConfigRepository
 from panel.infrastructure.vpn.config_builder import ProfileConfigBuilder, listening_port, previous_for_regenerate
+from panel.infrastructure.vpn.systemd_unit import stop_config_unit
 from panel.worker.context import WorkerContext, cert_fingerprint_for_keys
 
 logger = structlog.get_logger(__name__)
@@ -26,9 +27,12 @@ async def build_and_persist_version(
 ) -> None:
     builder = ProfileConfigBuilder(ctx.settings)
     previous = None
+    previous_port: int | None = None
+    snapshot = None
     if target_version > 1:
         snapshot = await repo.get_version_snapshot(config_id, target_version - 1)
         if snapshot is not None:
+            previous_port = snapshot.port
             encrypted_private = await repo.get_version_private_key(config_id, target_version - 1)
             private_plain = ""
             if encrypted_private and snapshot.profile is ConfigProfile.XRAY_REALITY:
@@ -45,9 +49,28 @@ async def build_and_persist_version(
                 public_key=snapshot.public_key,
             )
 
-    used_ports = await repo.list_used_ports()
-    result = builder.build(profile, name=name, previous=previous, exclude_ports=used_ports)
     profile_settings = ctx.settings.vpn.profiles[profile.value]
+    used_ports = await repo.list_used_ports(exclude_config_id=config_id)
+    reuse_port = previous_port is not None and previous_port in profile_settings.port_candidates
+
+    if (
+        target_version > 1
+        and ctx.settings.systemd.per_config
+        and not reuse_port
+    ):
+        await asyncio.to_thread(
+            stop_config_unit,
+            config_id,
+            settings=ctx.settings.systemd,
+        )
+
+    result = builder.build(
+        profile,
+        name=name,
+        previous=previous,
+        exclude_ports=used_ports,
+        preferred_port=previous_port,
+    )
     result.port = listening_port(profile, result.config_data, profile_settings)
     await asyncio.to_thread(
         builder.write_files,

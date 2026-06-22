@@ -127,3 +127,15 @@ def remove_config_unit(
 
     live_dir = live_config_path(profile, config_id, config_filename, settings).parent
     shutil.rmtree(live_dir, ignore_errors=True)
+
+
+def stop_config_unit(
+    config_id: uuid.UUID,
+    *,
+    settings: SystemdSettings,
+) -> None:
+    service_name = config_service_name(config_id, prefix=settings.service_prefix)
+    try:
+        run_systemctl("stop", service_name)
+    except subprocess.CalledProcessError:
+        pass

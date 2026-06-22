@@ -58,21 +58,32 @@ class ProfileConfigBuilder:
         name: str,
         previous: PreviousSecrets | None = None,
         exclude_ports: set[int] | None = None,
+        preferred_port: int | None = None,
     ) -> BuildResult:
         profile_settings = self._settings.vpn.profiles[profile.value]
         template_path = self._resolve_template_path(profile_settings.template_file)
         config = load_template(template_path)
 
         if profile is ConfigProfile.XRAY_REALITY:
-            return self._build_xray_reality(config, profile_settings, previous=previous, exclude_ports=exclude_ports)
+            return self._build_xray_reality(
+                config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
+            )
         if profile is ConfigProfile.XRAY_GRPC:
-            return self._build_xray_grpc(config, profile_settings, previous=previous, exclude_ports=exclude_ports)
+            return self._build_xray_grpc(
+                config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
+            )
         if profile is ConfigProfile.XRAY_XHTTP:
-            return self._build_xray_xhttp(config, profile_settings, previous=previous, exclude_ports=exclude_ports)
+            return self._build_xray_xhttp(
+                config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
+            )
         if profile is ConfigProfile.XRAY_CLIENT_IN:
-            return self._build_xray_client_in(config, profile_settings, previous=previous, exclude_ports=exclude_ports)
+            return self._build_xray_client_in(
+                config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
+            )
         if profile is ConfigProfile.HYSTERIA2:
-            return self._build_hysteria2(config, profile_settings, previous=previous, exclude_ports=exclude_ports)
+            return self._build_hysteria2(
+                config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
+            )
         raise ValueError(f"Unsupported profile: {profile}")
 
     def write_files(
@@ -189,9 +200,10 @@ class ProfileConfigBuilder:
         *,
         previous: PreviousSecrets | None,
         exclude_ports: set[int] | None,
+        preferred_port: int | None,
     ) -> BuildResult:
         inbound_tag = profile.inbound_tag
-        port = pick_port(profile.port_candidates, exclude=exclude_ports)
+        port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
         inbound = find_inbound(config, inbound_tag)
         inbound["port"] = port
 
@@ -226,9 +238,10 @@ class ProfileConfigBuilder:
         *,
         previous: PreviousSecrets | None,
         exclude_ports: set[int] | None,
+        preferred_port: int | None,
     ) -> BuildResult:
         inbound_tag = profile.inbound_tag
-        port = pick_port(profile.port_candidates, exclude=exclude_ports)
+        port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
         inbound = find_inbound(config, inbound_tag)
         inbound["port"] = port
 
@@ -264,11 +277,12 @@ class ProfileConfigBuilder:
         *,
         previous: PreviousSecrets | None,
         exclude_ports: set[int] | None,
+        preferred_port: int | None,
     ) -> BuildResult:
         import random
 
         inbound_tag = profile.inbound_tag
-        port = pick_port(profile.port_candidates, exclude=exclude_ports)
+        port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
         inbound = find_inbound(config, inbound_tag)
         inbound["port"] = port
 
@@ -299,9 +313,10 @@ class ProfileConfigBuilder:
         *,
         previous: PreviousSecrets | None,
         exclude_ports: set[int] | None,
+        preferred_port: int | None,
     ) -> BuildResult:
         inbound_tag = profile.inbound_tag
-        port = pick_port(profile.port_candidates, exclude=exclude_ports)
+        port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
         inbound = find_inbound(config, inbound_tag)
         inbound["port"] = port
         return BuildResult(
@@ -318,10 +333,11 @@ class ProfileConfigBuilder:
         *,
         previous: PreviousSecrets | None,
         exclude_ports: set[int] | None,
+        preferred_port: int | None,
     ) -> BuildResult:
         from panel.infrastructure.vpn.hysteria2 import generate_auth_password
 
-        port = pick_port(profile.port_candidates, exclude=exclude_ports, udp=True)
+        port = pick_port(profile.port_candidates, exclude=exclude_ports, udp=True, preferred=preferred_port)
         if previous and previous.password:
             password = previous.password
         else:

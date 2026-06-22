@@ -192,8 +192,11 @@ class VpnConfigRepository:
         )
         return int(result.scalar_one()) > 0
 
-    async def list_used_ports(self) -> set[int]:
-        result = await self._session.execute(select(VpnConfigVersionModel.port).distinct())
+    async def list_used_ports(self, *, exclude_config_id: uuid.UUID | None = None) -> set[int]:
+        stmt = select(VpnConfigVersionModel.port).distinct()
+        if exclude_config_id is not None:
+            stmt = stmt.where(VpnConfigVersionModel.config_id != exclude_config_id)
+        result = await self._session.execute(stmt)
         return {int(row[0]) for row in result.all()}
 
     async def insert_version(

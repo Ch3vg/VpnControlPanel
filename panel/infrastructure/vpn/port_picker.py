@@ -25,8 +25,12 @@ def pick_port(
     *,
     exclude: set[int] | None = None,
     udp: bool = False,
+    preferred: int | None = None,
 ) -> int:
     blocked = exclude or set()
+    if preferred is not None and preferred in candidates:
+        return preferred
+
     pool = [port for port in candidates if port not in blocked]
     if not pool:
         pool = list(candidates)

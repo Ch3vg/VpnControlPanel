@@ -32,6 +32,15 @@ def test_pick_port_udp_mode() -> None:
     assert mock_check.call_args.kwargs["udp"] is True
 
 
+def test_pick_port_preferred_reuses_without_bind_check() -> None:
+    with patch(
+        "panel.infrastructure.vpn.port_picker.is_port_available",
+        side_effect=AssertionError("bind check must be skipped for preferred port"),
+    ):
+        port = pick_port([8443, 8000], exclude={8000}, udp=True, preferred=8000)
+    assert port == 8000
+
+
 def test_pick_port_retries_all_candidates_when_excluded() -> None:
     with patch(
         "panel.infrastructure.vpn.port_picker.is_port_available",
