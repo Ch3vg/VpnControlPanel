@@ -149,7 +149,7 @@ def _build_grpc_uri(
         pcs = _pin_hex(cert_fingerprint)
         if pcs:
             params.append(f"pcs={pcs}")
-        params.extend(["insecure=0", "fragment=true"])
+        params.append("insecure=0")
     else:
         params.append("insecure=1")
     return f"vless://{client_id}@{host}:{port}?{'&'.join(params)}#{quote(label)}"

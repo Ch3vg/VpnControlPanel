@@ -32,6 +32,15 @@ def test_pick_port_udp_mode() -> None:
     assert mock_check.call_args.kwargs["udp"] is True
 
 
+def test_pick_port_random_among_available() -> None:
+    with patch(
+        "panel.infrastructure.vpn.port_picker.is_port_available",
+        return_value=True,
+    ):
+        ports = {pick_port([8443, 3478, 8800], udp=True) for _ in range(30)}
+    assert len(ports) > 1
+
+
 def test_pick_port_preferred_reuses_without_bind_check() -> None:
     with patch(
         "panel.infrastructure.vpn.port_picker.is_port_available",

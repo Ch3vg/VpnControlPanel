@@ -325,7 +325,9 @@ class ProfileConfigBuilder:
     ) -> BuildResult:
         from panel.infrastructure.vpn.hysteria2 import generate_auth_password
 
-        port = pick_port(profile.port_candidates, exclude=exclude_ports, udp=True, preferred=preferred_port)
+        blocked = set(exclude_ports or ())
+        blocked.add(self._settings.server.port)
+        port = pick_port(profile.port_candidates, exclude=blocked, udp=True, preferred=preferred_port)
         if previous and previous.password:
             password = previous.password
         else:

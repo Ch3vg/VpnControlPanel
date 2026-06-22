@@ -27,6 +27,9 @@ def pick_port(
     udp: bool = False,
     preferred: int | None = None,
 ) -> int:
+    if not candidates:
+        raise ValueError("port_candidates must not be empty")
+
     blocked = exclude or set()
     if preferred is not None and preferred in candidates:
         return preferred
@@ -34,16 +37,13 @@ def pick_port(
     pool = [port for port in candidates if port not in blocked]
     if not pool:
         pool = list(candidates)
-    if not pool:
-        raise ValueError("port_candidates must not be empty")
 
-    random.shuffle(pool)
-    for port in pool:
-        if is_port_available(port, udp=udp):
-            return port
+    available = [port for port in pool if is_port_available(port, udp=udp)]
+    if not available:
+        proto = "UDP" if udp else "TCP"
+        raise PortUnavailableError(
+            f"No free {proto} port among candidates {candidates}"
+            + (f" (excluded in DB: {sorted(blocked)})" if blocked else ""),
+        )
 
-    proto = "UDP" if udp else "TCP"
-    raise PortUnavailableError(
-        f"No free {proto} port among candidates {candidates}"
-        + (f" (excluded in DB: {sorted(blocked)})" if blocked else ""),
-    )
+    return random.choice(available)

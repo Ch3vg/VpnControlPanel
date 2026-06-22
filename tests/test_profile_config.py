@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from unittest.mock import patch
 
 import pytest
 
@@ -53,6 +54,17 @@ def test_hysteria2_writes_cert_paths(panel_settings, tmp_path) -> None:
     assert result.config_data["tls"]["key"].endswith("hysteria-key.pem")
     assert result.extra_files["cert"]
     assert result.extra_files["key"]
+
+
+def test_hysteria2_excludes_api_port(panel_settings) -> None:
+    settings = panel_settings.model_copy(
+        update={"server": panel_settings.server.model_copy(update={"port": 3478})},
+    )
+    builder = ProfileConfigBuilder(settings)
+    with patch("panel.infrastructure.vpn.config_builder.pick_port") as mock_pick:
+        mock_pick.return_value = 8800
+        builder.build(ConfigProfile.HYSTERIA2, name="Office")
+    assert settings.server.port in mock_pick.call_args.kwargs["exclude"]
 
 
 def test_write_files_active_config_path(panel_settings, tmp_path, monkeypatch) -> None:

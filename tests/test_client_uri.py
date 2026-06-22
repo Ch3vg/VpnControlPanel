@@ -70,7 +70,7 @@ def test_grpc_share_uri_format(panel_settings) -> None:
     assert "fingerprint=randomized" in uri
     assert "pcs=" in uri
     assert "insecure=0" in uri
-    assert "fragment=true" in uri
+    assert "fragment=true" not in uri
     assert uri.endswith("#gRPC-Dynamic")
 
 

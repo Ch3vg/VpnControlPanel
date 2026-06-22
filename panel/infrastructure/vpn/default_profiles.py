@@ -45,7 +45,7 @@ def default_vpn_profiles(*, cert_dir: str = "/usr/local/etc/xray/certs") -> dict
             "service_name": "hysteria-server",
             "config_filename": "config.yaml",
             "inbound_tag": "",
-            "port_candidates": [8443, 3478, 8800, 1935, 8000, 8080, 53, 123, 5000],
+            "port_candidates": [8443, 3478, 8800, 1935, 8080, 53, 123, 5000, 9443, 10443],
             "cert_dir": cert_dir,
             "cert_prefix": "hysteria",
         },
