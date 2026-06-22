@@ -66,6 +66,10 @@ systemd:
 
 vpn:
   public_host: "vpn.example.com"
+  connectivity_probe_enabled: true
+  connectivity_probe_timeout_seconds: 12
+  connectivity_probe_cache_seconds: 60
+  connectivity_probe_url: "https://www.cloudflare.com/cdn-cgi/trace"
   profiles:
     xray-reality:
       template_file: config_reality.json

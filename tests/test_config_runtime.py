@@ -14,7 +14,7 @@ async def test_list_configs_runtime(
     sample_config: uuid.UUID,
 ) -> None:
     with patch(
-        "panel.application.get_config_runtime.probe_config_runtime",
+        "panel.application.get_config_runtime.probe_config_availability",
         return_value=__import__(
             "panel.infrastructure.vpn.service_runtime",
             fromlist=["ServiceRuntimeProbe"],
@@ -41,7 +41,7 @@ async def test_get_config_status_includes_runtime(
     sample_config: uuid.UUID,
 ) -> None:
     with patch(
-        "panel.application.get_config_status.probe_config_runtime",
+        "panel.application.get_config_status.probe_config_availability",
         return_value=__import__(
             "panel.infrastructure.vpn.service_runtime",
             fromlist=["ServiceRuntimeProbe"],

@@ -10,7 +10,7 @@ from panel.domain.entities.vpn_config import VpnConfig
 from panel.domain.ports.broker import BrokerPort
 from panel.domain.value_objects.config_status import ConfigStatus
 from panel.infrastructure.persistence.repositories.vpn_config import VpnConfigRepository
-from panel.infrastructure.vpn.service_runtime import probe_config_runtime
+from panel.infrastructure.vpn.service_runtime import probe_config_availability
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,11 +80,12 @@ class GetConfigStatusUseCase:
             return {}
 
         probe = await asyncio.to_thread(
-            probe_config_runtime,
+            probe_config_availability,
             config_id=snapshot.config_id,
             profile=snapshot.profile,
             port=snapshot.port,
             settings=self._settings,
+            snapshot=snapshot,
         )
         return {
             "runtime_online": probe.online,

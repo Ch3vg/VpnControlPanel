@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from panel.config import PanelSettings
 from panel.domain.value_objects.config_profile import ConfigProfile
+from panel.infrastructure.persistence.repositories.vpn_config import ConfigVersionSnapshot
 from panel.infrastructure.vpn.service_ready import _systemd_running
 from panel.infrastructure.vpn.systemd_unit import config_service_name
 
@@ -88,4 +89,41 @@ def probe_config_runtime(
         systemd_active=systemd_active,
         port_listening=port_listening,
         detail=detail,
+    )
+
+
+def probe_config_availability(
+    *,
+    config_id: uuid.UUID,
+    profile: ConfigProfile,
+    port: int | None,
+    settings: PanelSettings,
+    snapshot: ConfigVersionSnapshot | None = None,
+) -> ServiceRuntimeProbe:
+    runtime = probe_config_runtime(
+        config_id=config_id,
+        profile=profile,
+        port=port,
+        settings=settings,
+    )
+    if not runtime.online or snapshot is None:
+        return runtime
+
+    from panel.infrastructure.vpn.vpn_connectivity import probe_config_connectivity
+
+    connectivity = probe_config_connectivity(snapshot, settings)
+    if connectivity.reachable is None:
+        return runtime
+    if connectivity.reachable:
+        return ServiceRuntimeProbe(
+            online=True,
+            systemd_active=runtime.systemd_active,
+            port_listening=runtime.port_listening,
+            detail=None,
+        )
+    return ServiceRuntimeProbe(
+        online=False,
+        systemd_active=runtime.systemd_active,
+        port_listening=runtime.port_listening,
+        detail=connectivity.detail or "connectivity probe failed",
     )

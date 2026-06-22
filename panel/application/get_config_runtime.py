@@ -10,7 +10,7 @@ from panel.infrastructure.persistence.repositories.vpn_config import (
     ConfigVersionSnapshot,
     VpnConfigRepository,
 )
-from panel.infrastructure.vpn.service_runtime import ServiceRuntimeProbe, probe_config_runtime
+from panel.infrastructure.vpn.service_runtime import probe_config_availability
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,11 +23,12 @@ class ConfigRuntimeStatus:
 
 
 def _probe_snapshot(snapshot: ConfigVersionSnapshot, settings: PanelSettings) -> ConfigRuntimeStatus:
-    probe = probe_config_runtime(
+    probe = probe_config_availability(
         config_id=snapshot.config_id,
         profile=snapshot.profile,
         port=snapshot.port,
         settings=settings,
+        snapshot=snapshot,
     )
     return ConfigRuntimeStatus(
         config_id=snapshot.config_id,
