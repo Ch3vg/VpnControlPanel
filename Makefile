@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .PHONY: help init-env secrets render deploy deploy-deps deploy-users deploy-db install-app \
         setup-config migrate create-admin regenerate-all install-systemd install-sudoers install-nginx \
-        restart status logs chmod-scripts check-scripts uninstall uninstall-keep-db update
+        restart status broker-status logs chmod-scripts check-scripts uninstall uninstall-keep-db update
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -64,6 +64,9 @@ restart: ## Restart all panel services
 
 status: ## Show service status
 	bash deploy/scripts/panel-services.sh status
+
+broker-status: ## Broker task counts (pending, waiting, done, dead)
+	bash deploy/scripts/broker-status.sh
 
 logs: ## Tail service logs
 	sudo bash deploy/scripts/panel-services.sh logs
