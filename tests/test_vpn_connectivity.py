@@ -108,6 +108,8 @@ def test_build_hysteria_client_decrypts_auth_password(panel_settings) -> None:
         settings=panel_settings,
     )
     assert client["auth"] == plain_password
+    assert client["tls"]["insecure"] is True
+    assert "pinSHA256" in client["tls"]
     assert not str(client["auth"]).startswith("gAAAA")
 
 

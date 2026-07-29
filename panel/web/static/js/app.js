@@ -34,6 +34,30 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+async function copyTextToClipboard(text) {
+  const value = String(text ?? "");
+  if (!value) {
+    throw new Error("Нечего копировать");
+  }
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  const ok = document.execCommand("copy");
+  document.body.removeChild(textarea);
+  if (!ok) {
+    throw new Error("Не удалось скопировать в буфер обмена");
+  }
+}
+
 function formatDate(value) {
   if (!value) return "—";
   return new Date(value).toLocaleString("ru-RU");
@@ -868,8 +892,12 @@ async function showShareResult(resultId, createLink) {
     `;
     resultEl.querySelector(".copy-share-btn")?.addEventListener("click", async (event) => {
       const targetId = event.currentTarget.dataset.target;
-      await navigator.clipboard.writeText(document.getElementById(targetId).textContent);
-      showToast("Ссылка скопирована", "success");
+      try {
+        await copyTextToClipboard(document.getElementById(targetId)?.textContent ?? "");
+        showToast("Ссылка скопирована", "success");
+      } catch (error) {
+        showToast(errorMessage(error), "error");
+      }
     });
     if (document.getElementById("share-links-body")) {
       const routeMatch = location.hash.match(/#\/configs\/([0-9a-f-]+)/i);

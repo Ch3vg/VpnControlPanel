@@ -283,17 +283,30 @@ tbody tr:hover {
   background: none;
   border: none;
   color: var(--accent);
-  padding: 0;
+  padding: 0.15rem 0;
   font-weight: 600;
   cursor: pointer;
 }
 
 .link-btn:hover {
   text-decoration: underline;
+  background: none;
 }
 
+button.link-btn.danger,
 .link-btn.danger {
-  color: var(--danger, #f87171);
+  padding: 0.45rem 0.85rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--danger);
+  color: #fff;
+}
+
+button.link-btn.danger:hover,
+.link-btn.danger:hover {
+  background: var(--danger-hover);
+  color: #fff;
+  text-decoration: none;
 }
 
 .detail-grid {

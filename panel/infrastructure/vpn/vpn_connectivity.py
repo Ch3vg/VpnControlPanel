@@ -274,7 +274,8 @@ def _build_hysteria_client_config(
     config_data = _plaintext_config_data(snapshot, settings)
     password = str(config_data["auth"]["password"])
     sni = config_data.get("sni") or config_data.get("tls", {}).get("sni") or "vpn-panel"
-    tls: dict[str, Any] = {"sni": str(sni), "insecure": False}
+    # Self-signed leaf: Hysteria needs insecure=true; pinSHA256 binds to the expected cert.
+    tls: dict[str, Any] = {"sni": str(sni), "insecure": True}
     pin = _pin_hex(snapshot.cert_fingerprint)
     if pin:
         tls["pinSHA256"] = pin
