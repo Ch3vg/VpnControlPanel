@@ -102,15 +102,8 @@ class ProfileConfigBuilder:
         base_path = Path(self._settings.paths.configs) / str(config_id)
         base_path.mkdir(parents=True, exist_ok=True)
 
-        if profile is ConfigProfile.HYSTERIA2:
-            body = yaml.safe_dump(result.config_data, sort_keys=False)
-        else:
-            body = json_dumps(result.config_data)
-
-        config_path = base_path / profile_settings.config_filename
-        atomic_write(config_path, body)
-
         systemd = self._settings.systemd
+        live_path: Path | None = None
         if systemd.per_config:
             from panel.infrastructure.vpn.systemd_unit import install_config_unit, live_config_path
 
@@ -121,6 +114,46 @@ class ProfileConfigBuilder:
                 systemd,
             )
             live_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if result.extra_files:
+            cert_dir = profile_settings.cert_dir
+            # Per-config units: keep certs next to the live config so regenerate
+            # of one profile cannot overwrite shared grpc/hysteria cert files.
+            if live_path is not None:
+                cert_base = live_path.parent
+            elif cert_dir is not None:
+                cert_base = Path(cert_dir)
+                cert_base.mkdir(parents=True, exist_ok=True)
+            else:
+                cert_base = base_path
+            cert_base.mkdir(parents=True, exist_ok=True)
+            prefix = profile_settings.cert_prefix or "cert"
+            cert_file = cert_base / f"{prefix}-cert.pem"
+            key_file = cert_base / f"{prefix}-key.pem"
+            _apply_tls_cert_paths(profile, result.config_data, cert_file=cert_file, key_file=key_file)
+
+            timestamp = int(time.time())
+            for kind, content in result.extra_files.items():
+                versioned = cert_base / f"{prefix}-{kind}-{timestamp}.pem"
+                body = content if content.endswith("\n") else content + "\n"
+                atomic_write(versioned, body, mode=0o640)
+                stable = cert_base / f"{prefix}-{kind}.pem"
+                if stable.exists() or stable.is_symlink():
+                    stable.unlink()
+                stable.symlink_to(versioned.name)
+
+        if profile is ConfigProfile.HYSTERIA2:
+            body = yaml.safe_dump(result.config_data, sort_keys=False)
+        else:
+            body = json_dumps(result.config_data)
+
+        config_path = base_path / profile_settings.config_filename
+        atomic_write(config_path, body)
+
+        if systemd.per_config:
+            from panel.infrastructure.vpn.systemd_unit import install_config_unit
+
+            assert live_path is not None
             atomic_write(live_path, body)
             install_config_unit(
                 profile,
@@ -135,23 +168,7 @@ class ProfileConfigBuilder:
             atomic_write(active_path, body)
             reload_service(profile_settings.service_name)
             wait_for_service_ready(profile_settings.service_name, profile, systemd)
-
-        cert_dir = profile_settings.cert_dir
-        if cert_dir is not None and result.extra_files:
-            cert_path = Path(cert_dir)
-            cert_path.mkdir(parents=True, exist_ok=True)
-            prefix = profile_settings.cert_prefix or "cert"
-            timestamp = int(time.time())
-            for kind, content in result.extra_files.items():
-                versioned = cert_path / f"{prefix}-{kind}-{timestamp}.pem"
-                body = content if content.endswith("\n") else content + "\n"
-                atomic_write(versioned, body, mode=0o640)
-                stable = cert_path / f"{prefix}-{kind}.pem"
-                if stable.exists() or stable.is_symlink():
-                    stable.unlink()
-                stable.symlink_to(versioned.name)
-
-        if not systemd.per_config and profile_settings.active_config_path is None:
+        else:
             reload_service(profile_settings.service_name)
             wait_for_service_ready(profile_settings.service_name, profile, systemd)
 
@@ -261,7 +278,7 @@ class ProfileConfigBuilder:
             else:
                 tls["serverName"] = random.choice(profile.grpc_sni_hosts)
 
-        private_pem, cert_pem, fingerprint = generate_self_signed_cert()
+        private_pem, cert_pem, fingerprint = _tls_material(previous)
         cert_dir = profile.cert_dir or Path("/usr/local/etc/xray/certs")
         prefix = profile.cert_prefix or "grpc"
         cert_file = str(cert_dir / f"{prefix}-cert.pem")
@@ -333,7 +350,7 @@ class ProfileConfigBuilder:
         else:
             password = generate_auth_password()
 
-        private_pem, cert_pem, fingerprint = generate_self_signed_cert()
+        private_pem, cert_pem, fingerprint = _tls_material(previous)
         cert_dir = profile.cert_dir or Path("/usr/local/etc/xray/certs")
         prefix = profile.cert_prefix or "hysteria"
         config["listen"] = f":{port}"
@@ -351,6 +368,43 @@ class ProfileConfigBuilder:
         )
 
 
+def _tls_material(previous: PreviousSecrets | None) -> tuple[str, str, str]:
+    if (
+        previous
+        and previous.private_key
+        and previous.public_key
+        and previous.cert_fingerprint
+    ):
+        return previous.private_key, previous.public_key, previous.cert_fingerprint
+    return generate_self_signed_cert()
+
+
+def _apply_tls_cert_paths(
+    profile: ConfigProfile,
+    config_data: dict[str, Any],
+    *,
+    cert_file: Path,
+    key_file: Path,
+) -> None:
+    if profile is ConfigProfile.HYSTERIA2:
+        tls = config_data.setdefault("tls", {})
+        tls["cert"] = str(cert_file)
+        tls["key"] = str(key_file)
+        return
+    if profile is ConfigProfile.XRAY_GRPC:
+        for inbound in config_data.get("inbounds", []):
+            certificates = (
+                inbound.get("streamSettings", {})
+                .get("tlsSettings", {})
+                .get("certificates")
+            )
+            if not certificates:
+                continue
+            certificates[0]["certificateFile"] = str(cert_file)
+            certificates[0]["keyFile"] = str(key_file)
+            return
+
+
 def json_dumps(data: dict[str, Any]) -> str:
     import json
 
@@ -363,6 +417,7 @@ def previous_for_regenerate(
     *,
     private_key_plain: str,
     public_key: str,
+    cert_fingerprint: str = "",
 ) -> PreviousSecrets | None:
     client_id = None
     for inbound in config_data.get("inbounds", []):
@@ -377,6 +432,21 @@ def previous_for_regenerate(
             private_key=private_key_plain,
             public_key=public_key,
         )
-    if profile in (ConfigProfile.XRAY_GRPC, ConfigProfile.XRAY_XHTTP):
+    if profile is ConfigProfile.XRAY_GRPC:
+        return PreviousSecrets(
+            client_id=client_id,
+            private_key=private_key_plain or None,
+            public_key=public_key or None,
+            cert_fingerprint=cert_fingerprint or None,
+        )
+    if profile is ConfigProfile.XRAY_XHTTP:
         return PreviousSecrets(client_id=client_id)
+    if profile is ConfigProfile.HYSTERIA2:
+        password = (config_data.get("auth") or {}).get("password")
+        return PreviousSecrets(
+            password=str(password) if password else None,
+            private_key=private_key_plain or None,
+            public_key=public_key or None,
+            cert_fingerprint=cert_fingerprint or None,
+        )
     return None

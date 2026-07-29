@@ -56,6 +56,64 @@ def test_hysteria2_writes_cert_paths(panel_settings, tmp_path) -> None:
     assert result.extra_files["key"]
 
 
+def test_hysteria2_regenerate_keeps_password_and_cert(panel_settings) -> None:
+    builder = ProfileConfigBuilder(panel_settings)
+    first = builder.build(ConfigProfile.HYSTERIA2, name="Office")
+    second = builder.build(
+        ConfigProfile.HYSTERIA2,
+        name="Office",
+        previous=PreviousSecrets(
+            password=first.config_data["auth"]["password"],
+            private_key=first.private_key,
+            public_key=first.public_key,
+            cert_fingerprint=first.cert_fingerprint,
+        ),
+    )
+    assert second.config_data["auth"]["password"] == first.config_data["auth"]["password"]
+    assert second.cert_fingerprint == first.cert_fingerprint
+    assert second.private_key == first.private_key
+    assert second.public_key == first.public_key
+
+
+def test_write_files_per_config_certs_are_isolated(panel_settings, tmp_path, monkeypatch) -> None:
+    settings = panel_settings.model_copy(
+        update={
+            "paths": panel_settings.paths.model_copy(update={"configs": tmp_path / "archive"}),
+            "systemd": panel_settings.systemd.model_copy(
+                update={
+                    "per_config": True,
+                    "hysteria_config_dir": tmp_path / "hysteria",
+                    "unit_dir": tmp_path / "units",
+                },
+            ),
+        },
+    )
+    monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.run_systemctl", lambda *_a, **_k: None)
+    monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.enable_service", lambda *_a, **_k: None)
+    monkeypatch.setattr("panel.infrastructure.vpn.systemd_unit.reload_service", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        "panel.infrastructure.vpn.systemd_unit.wait_for_service_ready",
+        lambda *_a, **_k: None,
+    )
+
+    builder = ProfileConfigBuilder(settings)
+    first = builder.build(ConfigProfile.HYSTERIA2, name="A")
+    second = builder.build(ConfigProfile.HYSTERIA2, name="B")
+    id_a, id_b = uuid.uuid4(), uuid.uuid4()
+    builder.write_files(ConfigProfile.HYSTERIA2, id_a, first, config_name="A")
+    builder.write_files(ConfigProfile.HYSTERIA2, id_b, second, config_name="B")
+
+    live_a = tmp_path / "hysteria" / str(id_a) / "config.yaml"
+    live_b = tmp_path / "hysteria" / str(id_b) / "config.yaml"
+    assert live_a.is_file() and live_b.is_file()
+    text_a = live_a.read_text(encoding="utf-8")
+    text_b = live_b.read_text(encoding="utf-8")
+    assert str(tmp_path / "hysteria" / str(id_a) / "hysteria-cert.pem") in text_a
+    assert str(tmp_path / "hysteria" / str(id_b) / "hysteria-cert.pem") in text_b
+    assert (tmp_path / "hysteria" / str(id_a) / "hysteria-cert.pem").exists()
+    assert (tmp_path / "hysteria" / str(id_b) / "hysteria-cert.pem").exists()
+
+
 def test_hysteria2_excludes_api_port(panel_settings) -> None:
     settings = panel_settings.model_copy(
         update={"server": panel_settings.server.model_copy(update={"port": 3478})},

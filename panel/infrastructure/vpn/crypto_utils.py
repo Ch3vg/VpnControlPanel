@@ -8,13 +8,22 @@ import secrets
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.x509.oid import NameOID
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 
-def generate_self_signed_cert() -> tuple[str, str, str]:
-    """Return private_key_pem, cert_pem, sha256 fingerprint hex."""
+def generate_self_signed_cert(*, dns_names: list[str] | None = None) -> tuple[str, str, str]:
+    """Return private_key_pem, cert_pem, sha256 fingerprint hex.
+
+    Always includes a DNS SAN. Modern Go (Hysteria, recent Xray) rejects
+    CN-only certificates with "legacy Common Name field".
+    """
+    names = [n.strip() for n in (dns_names or []) if n and str(n).strip()]
+    if "vpn-panel" not in names:
+        names.insert(0, "vpn-panel")
+
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "vpn-panel")])
+    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, names[0])])
+    san = x509.SubjectAlternativeName([x509.DNSName(name) for name in names])
     cert = (
         x509.CertificateBuilder()
         .subject_name(subject)
@@ -23,6 +32,11 @@ def generate_self_signed_cert() -> tuple[str, str, str]:
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.datetime.now(datetime.UTC))
         .not_valid_after(datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=365))
+        .add_extension(san, critical=False)
+        .add_extension(
+            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]),
+            critical=False,
+        )
         .sign(key, hashes.SHA256())
     )
     private_pem = key.private_bytes(

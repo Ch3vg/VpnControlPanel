@@ -37,7 +37,11 @@ async def build_and_persist_version(
             previous_port = snapshot.port
             encrypted_private = await repo.get_version_private_key(config_id, target_version - 1)
             private_plain = ""
-            if encrypted_private and snapshot.profile is ConfigProfile.XRAY_REALITY:
+            if encrypted_private and snapshot.profile in {
+                ConfigProfile.XRAY_REALITY,
+                ConfigProfile.XRAY_GRPC,
+                ConfigProfile.HYSTERIA2,
+            }:
                 private_plain = ctx.encryptor.decrypt(encrypted_private)
             config_plain = decrypt_config_data_fields(
                 snapshot.config_data,
@@ -49,6 +53,7 @@ async def build_and_persist_version(
                 config_plain,
                 private_key_plain=private_plain,
                 public_key=snapshot.public_key,
+                cert_fingerprint=snapshot.cert_fingerprint,
             )
 
     preferred_grpc_sni: str | None = None
