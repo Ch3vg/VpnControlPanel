@@ -274,15 +274,33 @@ sudo make regenerate-all
 sudo bash deploy/scripts/regenerate-all-configs.sh
 ```
 
-Crontab (пример — каждое воскресенье в 04:00):
-
-```cron
-0 4 * * 0 root cd /srv/VpnControlPanel && bash deploy/scripts/regenerate-all-configs.sh >> /var/log/vpn-panel-regenerate.log 2>&1
-```
+Скрипт только **ставит задачи в очередь**. Дата/версия на сайте обновляются после того, как `vpn-worker@*` их выполнит. Логи CLI: stdout (для cron — в файл ниже); прогресс воркера — `journalctl -u 'vpn-worker@*'`.
 
 Пользователь для audit (`requested_by`): `VCP_CRON_ADMIN_USERNAME` в `deploy/.env` (по умолчанию `VCP_ADMIN_USERNAME`).
 
 Конфиги в статусе `pending` / `processing` пропускаются.
+
+**Важно:** формат `crontab -e` и `/etc/cron.d/` разный. В user crontab **нет** поля user — строка с `root` перед командой запускает несуществующую команду `root` и молча ничего не делает.
+
+`crontab -e` от root (ежедневно в 04:00):
+
+```cron
+0 4 * * * cd /srv/VpnControlPanel && /bin/bash deploy/scripts/regenerate-all-configs.sh >> /var/log/vpn-panel-regenerate.log 2>&1
+```
+
+Или файл `/etc/cron.d/vpn-panel-regenerate` (здесь поле user нужно):
+
+```cron
+0 4 * * * root cd /srv/VpnControlPanel && /bin/bash deploy/scripts/regenerate-all-configs.sh >> /var/log/vpn-panel-regenerate.log 2>&1
+```
+
+Проверка:
+
+```bash
+sudo bash deploy/scripts/regenerate-all-configs.sh
+tail -n 50 /var/log/vpn-panel-regenerate.log
+# на сайте: номер версии и «Обновлён» / «Создана» у version должны сдвинуться после воркера
+```
 
 ---
 

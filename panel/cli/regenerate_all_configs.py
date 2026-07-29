@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
 
 from panel.application.audit_service import AuditService
@@ -12,6 +13,11 @@ from panel.infrastructure.persistence.database import create_engine, create_sess
 from panel.infrastructure.persistence.repositories.audit import AuditRepository
 from panel.infrastructure.persistence.repositories.user import UserRepository
 from panel.infrastructure.persistence.repositories.vpn_config import VpnConfigRepository
+
+
+def _log(message: str) -> None:
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    print(f"[{stamp}] {message}", flush=True)
 
 
 async def _regenerate_all(config_path: Path | None, username: str) -> int:
@@ -26,6 +32,7 @@ async def _regenerate_all(config_path: Path | None, username: str) -> int:
             if user is None:
                 raise SystemExit(f"User not found: {username}")
 
+            _log(f"queueing regenerate-all as user={username}")
             use_case = RegenerateAllConfigsUseCase(
                 settings,
                 session,
@@ -39,11 +46,12 @@ async def _regenerate_all(config_path: Path | None, username: str) -> int:
         await engine.dispose()
 
     for item in result.queued:
-        print(f"queued {item.config_id} task={item.task_id}")
+        _log(f"queued {item.config_id} task={item.task_id}")
     for item in result.skipped:
-        print(f"skipped {item.config_id}: {item.reason}", flush=True)
-    print(f"Done: queued={len(result.queued)} skipped={len(result.skipped)}")
+        _log(f"skipped {item.config_id}: {item.reason}")
+    _log(f"Done: queued={len(result.queued)} skipped={len(result.skipped)}")
     return 0
+
 
 
 def main() -> None:
