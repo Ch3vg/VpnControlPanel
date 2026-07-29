@@ -111,6 +111,55 @@ def test_build_hysteria_client_decrypts_auth_password(panel_settings) -> None:
     assert not str(client["auth"]).startswith("gAAAA")
 
 
+def test_probe_hysteria_falls_back_to_localhost(panel_settings, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from panel.infrastructure.crypto import FieldEncryptor
+
+    encryptor = FieldEncryptor(panel_settings.security.encryption_key)
+    fake_hy = tmp_path / "hysteria"
+    fake_hy.write_text("", encoding="utf-8")
+    settings = panel_settings.model_copy(
+        update={
+            "systemd": panel_settings.systemd.model_copy(update={"hysteria_binary": fake_hy}),
+            "vpn": panel_settings.vpn.model_copy(
+                update={"public_host": "vpn.example.com", "connectivity_probe_cache_seconds": 1},
+            ),
+        },
+    )
+    snapshot = ConfigVersionSnapshot(
+        config_id=uuid.uuid4(),
+        protocol=VpnProtocolType.HYSTERIA2,
+        profile=ConfigProfile.HYSTERIA2,
+        name="hy2",
+        version=1,
+        port=8443,
+        public_key="",
+        cert_fingerprint="cd" * 32,
+        config_data={
+            "listen": ":8443",
+            "auth": {"type": "password", "password": encryptor.encrypt("pw")},
+            "tls": {"cert": "/tmp/c.pem", "key": "/tmp/k.pem"},
+        },
+    )
+
+    attempts: list[str] = []
+
+    def fake_run_client_probe(*, cmd, config_path, socks_port, host, timeout, probe_url):
+        attempts.append(host)
+        config_path.unlink(missing_ok=True)
+        if host == "127.0.0.1":
+            return VpnConnectivityProbe(reachable=True)
+        return VpnConnectivityProbe(reachable=False, detail=f"local socks proxy did not start (host={host})")
+
+    monkeypatch.setattr(
+        "panel.infrastructure.vpn.vpn_connectivity._run_client_probe",
+        fake_run_client_probe,
+    )
+
+    probe = probe_config_connectivity(snapshot, settings)
+    assert probe.reachable is True
+    assert attempts == ["vpn.example.com", "127.0.0.1"]
+
+
 def test_probe_config_connectivity_success(panel_settings, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     snapshot = _reality_snapshot(panel_settings)
     fake_xray = tmp_path / "xray"

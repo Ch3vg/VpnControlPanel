@@ -69,13 +69,63 @@ def _find_curl() -> str | None:
     return shutil.which("curl")
 
 
-def _wait_for_port(port: int, *, timeout: float) -> bool:
+def _probe_connect_hosts(settings: PanelSettings) -> list[str]:
+    """Hosts to dial for the probe client.
+
+    Prefer public_host (as end users do), then 127.0.0.1 — UDP/TCP hairpin to the
+    VPS public IP often fails from the same host, especially for Hysteria/QUIC.
+    """
+    hosts: list[str] = []
+    public = settings.vpn.public_host.strip()
+    if public:
+        hosts.append(public)
+    if "127.0.0.1" not in hosts:
+        hosts.append("127.0.0.1")
+    return hosts
+
+
+def _wait_for_port(port: int, *, timeout: float, proc: subprocess.Popen[Any] | None = None) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if is_tcp_port_open(port):
             return True
+        if proc is not None and proc.poll() is not None:
+            return False
         time.sleep(0.2)
     return False
+
+
+def _read_process_tail(proc: subprocess.Popen[Any], *, limit: int = 240) -> str:
+    chunks: list[str] = []
+    for stream in (proc.stderr, proc.stdout):
+        if stream is None:
+            continue
+        try:
+            data = stream.read()
+        except OSError:
+            continue
+        if not data:
+            continue
+        text = data.decode(errors="replace") if isinstance(data, bytes) else str(data)
+        text = text.strip()
+        if text:
+            chunks.append(text)
+    joined = " | ".join(chunks).strip()
+    return joined[-limit:] if joined else ""
+
+
+def _socks_start_failure_detail(proc: subprocess.Popen[Any] | None, host: str) -> str:
+    if proc is None:
+        return f"local socks proxy did not start (host={host})"
+    exit_code = proc.poll()
+    tail = _read_process_tail(proc)
+    if exit_code is not None:
+        detail = f"probe client exited ({exit_code}) host={host}"
+    else:
+        detail = f"local socks proxy did not start (host={host})"
+    if tail:
+        detail = f"{detail}: {tail}"
+    return detail[:240]
 
 
 def _curl_via_socks(port: int, url: str, *, timeout: float) -> tuple[bool, str]:
@@ -237,34 +287,29 @@ def _build_hysteria_client_config(
     }
 
 
-def _probe_via_xray(snapshot: ConfigVersionSnapshot, settings: PanelSettings) -> VpnConnectivityProbe:
-    binary = settings.systemd.xray_binary
-    if not binary.is_file():
-        return VpnConnectivityProbe(reachable=None, detail="xray binary not found")
-
-    host = settings.vpn.public_host.strip()
-    if not host:
-        return VpnConnectivityProbe(reachable=None, detail="vpn.public_host is empty")
-
-    socks_port = _pick_free_tcp_port()
-    client_config = _build_xray_client_config(snapshot, host=host, socks_port=socks_port, settings=settings)
-    timeout = settings.vpn.connectivity_probe_timeout_seconds
-
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as handle:
-        json.dump(client_config, handle)
-        config_path = Path(handle.name)
-
+def _run_client_probe(
+    *,
+    cmd: list[str],
+    config_path: Path,
+    socks_port: int,
+    host: str,
+    timeout: float,
+    probe_url: str,
+) -> VpnConnectivityProbe:
     proc: subprocess.Popen[Any] | None = None
     try:
         proc = subprocess.Popen(
-            [binary.as_posix(), "run", "-config", config_path.as_posix()],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
-        if not _wait_for_port(socks_port, timeout=min(5.0, timeout)):
-            return VpnConnectivityProbe(reachable=False, detail="local socks proxy did not start")
+        if not _wait_for_port(socks_port, timeout=min(5.0, timeout), proc=proc):
+            return VpnConnectivityProbe(
+                reachable=False,
+                detail=_socks_start_failure_detail(proc, host),
+            )
         time.sleep(0.5)
-        ok, detail = _curl_via_socks(socks_port, settings.vpn.connectivity_probe_url, timeout=timeout)
+        ok, detail = _curl_via_socks(socks_port, probe_url, timeout=timeout)
         if ok:
             return VpnConnectivityProbe(reachable=True)
         return VpnConnectivityProbe(reachable=False, detail=detail or "connectivity probe failed")
@@ -274,6 +319,38 @@ def _probe_via_xray(snapshot: ConfigVersionSnapshot, settings: PanelSettings) ->
         if proc is not None:
             _terminate_process(proc)
         config_path.unlink(missing_ok=True)
+
+
+def _probe_via_xray(snapshot: ConfigVersionSnapshot, settings: PanelSettings) -> VpnConnectivityProbe:
+    binary = settings.systemd.xray_binary
+    if not binary.is_file():
+        return VpnConnectivityProbe(reachable=None, detail="xray binary not found")
+
+    hosts = _probe_connect_hosts(settings)
+    if not hosts:
+        return VpnConnectivityProbe(reachable=None, detail="vpn.public_host is empty")
+
+    timeout = settings.vpn.connectivity_probe_timeout_seconds
+    last = VpnConnectivityProbe(reachable=False, detail="connectivity probe failed")
+    for host in hosts:
+        socks_port = _pick_free_tcp_port()
+        client_config = _build_xray_client_config(
+            snapshot, host=host, socks_port=socks_port, settings=settings,
+        )
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as handle:
+            json.dump(client_config, handle)
+            config_path = Path(handle.name)
+        last = _run_client_probe(
+            cmd=[binary.as_posix(), "run", "-config", config_path.as_posix()],
+            config_path=config_path,
+            socks_port=socks_port,
+            host=host,
+            timeout=timeout,
+            probe_url=settings.vpn.connectivity_probe_url,
+        )
+        if last.reachable:
+            return last
+    return last
 
 
 def _probe_via_hysteria(snapshot: ConfigVersionSnapshot, settings: PanelSettings) -> VpnConnectivityProbe:
@@ -281,40 +358,31 @@ def _probe_via_hysteria(snapshot: ConfigVersionSnapshot, settings: PanelSettings
     if not binary.is_file():
         return VpnConnectivityProbe(reachable=None, detail="hysteria binary not found")
 
-    host = settings.vpn.public_host.strip()
-    if not host:
+    hosts = _probe_connect_hosts(settings)
+    if not hosts:
         return VpnConnectivityProbe(reachable=None, detail="vpn.public_host is empty")
 
-    socks_port = _pick_free_tcp_port()
-    client_config = _build_hysteria_client_config(
-        snapshot, host=host, socks_port=socks_port, settings=settings,
-    )
     timeout = settings.vpn.connectivity_probe_timeout_seconds
-
-    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as handle:
-        yaml.safe_dump(client_config, handle, sort_keys=False)
-        config_path = Path(handle.name)
-
-    proc: subprocess.Popen[Any] | None = None
-    try:
-        proc = subprocess.Popen(
-            [binary.as_posix(), "client", "-c", config_path.as_posix()],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+    last = VpnConnectivityProbe(reachable=False, detail="connectivity probe failed")
+    for host in hosts:
+        socks_port = _pick_free_tcp_port()
+        client_config = _build_hysteria_client_config(
+            snapshot, host=host, socks_port=socks_port, settings=settings,
         )
-        if not _wait_for_port(socks_port, timeout=min(5.0, timeout)):
-            return VpnConnectivityProbe(reachable=False, detail="local socks proxy did not start")
-        time.sleep(0.5)
-        ok, detail = _curl_via_socks(socks_port, settings.vpn.connectivity_probe_url, timeout=timeout)
-        if ok:
-            return VpnConnectivityProbe(reachable=True)
-        return VpnConnectivityProbe(reachable=False, detail=detail or "connectivity probe failed")
-    except OSError as exc:
-        return VpnConnectivityProbe(reachable=False, detail=str(exc))
-    finally:
-        if proc is not None:
-            _terminate_process(proc)
-        config_path.unlink(missing_ok=True)
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as handle:
+            yaml.safe_dump(client_config, handle, sort_keys=False)
+            config_path = Path(handle.name)
+        last = _run_client_probe(
+            cmd=[binary.as_posix(), "client", "-c", config_path.as_posix()],
+            config_path=config_path,
+            socks_port=socks_port,
+            host=host,
+            timeout=timeout,
+            probe_url=settings.vpn.connectivity_probe_url,
+        )
+        if last.reachable:
+            return last
+    return last
 
 
 def probe_config_connectivity(
