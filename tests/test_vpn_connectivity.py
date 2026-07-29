@@ -80,12 +80,14 @@ def test_build_xray_grpc_client_uses_pinned_peer_cert_sha256(panel_settings) -> 
     assert "pinnedPeerCertChainSha256" not in tls
 
 
-def test_build_hysteria_client_decrypts_auth_password(panel_settings) -> None:
+def test_build_hysteria_client_decrypts_auth_password(panel_settings, tmp_path) -> None:
     from panel.infrastructure.crypto import FieldEncryptor
     from panel.infrastructure.vpn.vpn_connectivity import _build_hysteria_client_config
 
     plain_password = "super-secret-hy2-password"
     encryptor = FieldEncryptor(panel_settings.security.encryption_key)
+    ca_path = tmp_path / "hy-ca.pem"
+    ca_path.write_text("-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n", encoding="utf-8")
     snapshot = ConfigVersionSnapshot(
         config_id=uuid.uuid4(),
         protocol=VpnProtocolType.HYSTERIA2,
@@ -93,7 +95,7 @@ def test_build_hysteria_client_decrypts_auth_password(panel_settings) -> None:
         name="hy2",
         version=1,
         port=8443,
-        public_key="",
+        public_key=ca_path.read_text(encoding="utf-8"),
         cert_fingerprint="cd" * 32,
         config_data={
             "listen": ":8443",
@@ -106,9 +108,11 @@ def test_build_hysteria_client_decrypts_auth_password(panel_settings) -> None:
         host="vpn.example.com",
         socks_port=19081,
         settings=panel_settings,
+        ca_path=ca_path,
     )
     assert client["auth"] == plain_password
-    assert client["tls"]["insecure"] is True
+    assert client["tls"]["insecure"] is False
+    assert client["tls"]["ca"] == ca_path.as_posix()
     assert "pinSHA256" in client["tls"]
     assert not str(client["auth"]).startswith("gAAAA")
 
@@ -134,7 +138,7 @@ def test_probe_hysteria_falls_back_to_localhost(panel_settings, tmp_path, monkey
         name="hy2",
         version=1,
         port=8443,
-        public_key="",
+        public_key="-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
         cert_fingerprint="cd" * 32,
         config_data={
             "listen": ":8443",

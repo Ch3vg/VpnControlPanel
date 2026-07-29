@@ -168,13 +168,12 @@ def _build_hysteria2_uri(
     sni = config_data.get("sni") or config_data.get("tls", {}).get("sni") or "vpn-panel"
     params = [f"sni={quote(str(sni), safe='')}"]
     if secure:
-        # Self-signed: Hysteria requires insecure=true; pinSHA256 still authenticates the peer.
+        # URI scheme has no `ca=` param. pinSHA256 + insecure=0 is the secure share form;
+        # clients that trust the pin (or import the cert) connect without insecure mode.
         pin = _pin_hex(cert_fingerprint)
         if pin:
             params.append(f"pinSHA256={pin}")
-            params.append("insecure=1")
-        else:
-            params.append("insecure=0")
+        params.append("insecure=0")
     else:
         params.append("insecure=1")
     return f"hysteria2://{quote(password, safe='')}@{host}:{port}?{'&'.join(params)}#{quote(label)}"

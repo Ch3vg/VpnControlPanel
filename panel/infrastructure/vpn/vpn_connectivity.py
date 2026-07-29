@@ -270,12 +270,15 @@ def _build_hysteria_client_config(
     host: str,
     socks_port: int,
     settings: PanelSettings,
+    ca_path: Path | None = None,
 ) -> dict[str, Any]:
     config_data = _plaintext_config_data(snapshot, settings)
     password = str(config_data["auth"]["password"])
     sni = config_data.get("sni") or config_data.get("tls", {}).get("sni") or "vpn-panel"
-    # Self-signed leaf: Hysteria needs insecure=true; pinSHA256 binds to the expected cert.
-    tls: dict[str, Any] = {"sni": str(sni), "insecure": True}
+    # Trust the panel-issued leaf via tls.ca (same idea as Xray pin), not insecure=.
+    tls: dict[str, Any] = {"sni": str(sni), "insecure": False}
+    if ca_path is not None:
+        tls["ca"] = ca_path.as_posix()
     pin = _pin_hex(snapshot.cert_fingerprint)
     if pin:
         tls["pinSHA256"] = pin
@@ -286,6 +289,13 @@ def _build_hysteria_client_config(
         "socks5": {"listen": f"127.0.0.1:{socks_port}"},
         "log": {"level": "warn"},
     }
+
+
+def _write_temp_ca(cert_pem: str) -> Path:
+    body = cert_pem if cert_pem.endswith("\n") else f"{cert_pem}\n"
+    with tempfile.NamedTemporaryFile("w", suffix=".pem", delete=False, encoding="utf-8") as handle:
+        handle.write(body)
+        return Path(handle.name)
 
 
 def _run_client_probe(
@@ -363,27 +373,39 @@ def _probe_via_hysteria(snapshot: ConfigVersionSnapshot, settings: PanelSettings
     if not hosts:
         return VpnConnectivityProbe(reachable=None, detail="vpn.public_host is empty")
 
+    cert_pem = (snapshot.public_key or "").strip()
+    if not cert_pem:
+        return VpnConnectivityProbe(reachable=None, detail="hysteria certificate missing from snapshot")
+
+    ca_path = _write_temp_ca(cert_pem)
     timeout = settings.vpn.connectivity_probe_timeout_seconds
     last = VpnConnectivityProbe(reachable=False, detail="connectivity probe failed")
-    for host in hosts:
-        socks_port = _pick_free_tcp_port()
-        client_config = _build_hysteria_client_config(
-            snapshot, host=host, socks_port=socks_port, settings=settings,
-        )
-        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as handle:
-            yaml.safe_dump(client_config, handle, sort_keys=False)
-            config_path = Path(handle.name)
-        last = _run_client_probe(
-            cmd=[binary.as_posix(), "client", "-c", config_path.as_posix()],
-            config_path=config_path,
-            socks_port=socks_port,
-            host=host,
-            timeout=timeout,
-            probe_url=settings.vpn.connectivity_probe_url,
-        )
-        if last.reachable:
-            return last
-    return last
+    try:
+        for host in hosts:
+            socks_port = _pick_free_tcp_port()
+            client_config = _build_hysteria_client_config(
+                snapshot,
+                host=host,
+                socks_port=socks_port,
+                settings=settings,
+                ca_path=ca_path,
+            )
+            with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as handle:
+                yaml.safe_dump(client_config, handle, sort_keys=False)
+                config_path = Path(handle.name)
+            last = _run_client_probe(
+                cmd=[binary.as_posix(), "client", "-c", config_path.as_posix()],
+                config_path=config_path,
+                socks_port=socks_port,
+                host=host,
+                timeout=timeout,
+                probe_url=settings.vpn.connectivity_probe_url,
+            )
+            if last.reachable:
+                return last
+        return last
+    finally:
+        ca_path.unlink(missing_ok=True)
 
 
 def probe_config_connectivity(

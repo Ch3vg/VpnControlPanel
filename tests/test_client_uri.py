@@ -141,5 +141,5 @@ def test_hysteria2_share_uri_format(panel_settings) -> None:
     assert uri.startswith("hysteria2://")
     assert "sni=" in uri
     assert "pinSHA256=" in uri
-    assert "insecure=1" in uri
+    assert "insecure=0" in uri
     assert uri.endswith("#Hysteria2-Dynamic")
