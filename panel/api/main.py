@@ -12,6 +12,7 @@ from fastapi import Depends, FastAPI
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 
+from panel import __version__
 from panel.api.deps import get_current_user
 from panel.api.middleware.security_headers import SecurityHeadersMiddleware
 from panel.api.routers import auth, configs, health, metrics, share, system
@@ -39,7 +40,7 @@ def create_app(settings: PanelSettings, *, with_db: bool = True) -> FastAPI:
 
     app = FastAPI(
         title=settings.app.name,
-        version="0.2.0",
+        version=__version__,
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,
@@ -74,7 +75,7 @@ def create_app(settings: PanelSettings, *, with_db: bool = True) -> FastAPI:
         async def openapi() -> dict:
             return get_openapi(
                 title=settings.app.name,
-                version="0.2.0",
+                version=__version__,
                 routes=app.routes,
             )
 

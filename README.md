@@ -2,7 +2,7 @@
 
 Веб-панель для администрирования серверных VPN-конфигураций (Xray и Hysteria2).
 
-**v0.2.0** — REST API + **admin UI** (`/admin`), worker, шаблоны конфигов.
+**v1.0.0** — production-ready: REST API, admin UI (`/admin`), worker, per-config systemd, share-ссылки, connectivity probe, regenerate-all (UI/CLI/cron).
 
 ---
 
@@ -16,6 +16,13 @@
 - **Секреты только в воркере** — панель публикует в брокер metadata без VPN-ключей; воркер генерирует, шифрует и сохраняет в БД приложения.
 - **Версионирование конфигов** — share-ссылки привязаны к конкретной версии и не ломаются при regenerate.
 - **Луковая архитектура** — domain → application → infrastructure; HTTP-слои тонкие.
+
+В 1.0.0 также:
+
+- профили `xray-reality`, `xray-xhttp`, `xray-grpc`, `hysteria2`;
+- secure / insecure share (для Hysteria2/gRPC: `pinSHA256` + `insecure=0`, либо `insecure=1`);
+- probe доступности через публичный host (и fallback на localhost);
+- `regenerate-all` из UI, API и `deploy/scripts/regenerate-all-configs.sh` (cron).
 
 ---
 
@@ -266,7 +273,9 @@ Append-only. События `share.accessed` не пишутся на кажды
 | POST | `/api/v1/configs` | Создать → `202 {task_id}` (`profile`: `xray-reality`, `xray-grpc`, …) |
 | GET | `/api/v1/configs/{id}` | Детали + текущая версия |
 | POST | `/api/v1/configs/{id}/regenerate` | Regenerate → `202 {task_id}` |
+| POST | `/api/v1/configs/regenerate-all` | Очередь regenerate для всех active |
 | GET | `/api/v1/configs/{id}/status` | Статус последней задачи |
+| GET | `/api/v1/configs/runtime` | Runtime / connectivity probe (список) |
 | DELETE | `/api/v1/configs/{id}` | Soft delete |
 
 ### Share-ссылки
@@ -282,8 +291,11 @@ Append-only. События `share.accessed` не пишутся на кажды
 ```
 vless://...@host:8444?type=tcp&security=reality&flow=xtls-rprx-vision&fp=chrome&pbk=...&sid=...&sni=...&fragment=true#Reality-Dynamic
 vless://...@host:81?type=xhttp&security=none&host=...&path=/download&mode=packet-up#XHTTP-Dynamic
-hysteria2://...@host:443?sni=...&pinSHA256=...&insecure=0#Hysteria2-Dynamic
+hysteria2://...@host:443?sni=vpn-panel&pinSHA256=...&insecure=0#Hysteria2-Dynamic
 ```
+
+Secure-ссылки для самоподписанных TLS (Hysteria2, gRPC) рассчитаны на клиентов с pin (`pinSHA256` / `pcs`).  
+`insecure=1` удобен для клиентов вроде Hiddify/sing-box; современные **v2rayNG + Xray** `allowInsecure` больше не принимают — нужен secure share с pin.
 
 ---
 
@@ -380,7 +392,7 @@ mTLS планируется в брокере позже — схема HTTP API
 - `systemctl reload` через sudoers (без `shell=True`).
 - Запись файлов: temp → atomic rename (`os.replace`).
 
-### Admin UI (v0.2.0)
+### Admin UI
 
 | URL | Описание |
 |-----|----------|
@@ -391,8 +403,8 @@ JWT хранится в `sessionStorage`. Отключение: `web.enabled: fa
 
 Экраны:
 - **Login** — `/auth/login`
-- **Список** — фильтр по protocol, создание конфига (name + protocol + profile)
-- **Детали** — polling статуса, regenerate, share-ссылка, revoke, delete
+- **Список** — фильтр по protocol, создание, regenerate-all, share-all (secure/insecure)
+- **Детали** — polling статуса, regenerate, runtime/probe, share, revoke, delete
 
 ### Swagger / OpenAPI
 
@@ -581,17 +593,10 @@ pytest tests/
 
 ---
 
-## Дорожная карта реализации
+## Статус v1.0.0
 
-| Этап | Содержание |
-|------|------------|
-| 0 | Каркас: pyproject.toml, конфиги, структура пакетов, health |
-| 1 | Auth: users, JWT, login, rate limit |
-| 2 | Модели БД, миграции, GET/DELETE configs |
-| 3 | Broker client, worker pull loop, `config.initialize` |
-| 4 | `config.regenerate`, версионирование |
-| 5 | Share links, публичный endpoint |
-| 6 | Audit, метрики, hardening |
+Базовый контур (auth, configs, worker, share, audit, metrics, admin UI, production deploy) реализован.  
+Дальнейшие изменения — точечные улучшения и новые протоколы, не «дорожная карта MVP».
 
 ---
 

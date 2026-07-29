@@ -1,6 +1,7 @@
 # Деплой VPN Control Panel
 
-Production-деплой на **Debian/Ubuntu** с автоматизацией через `Makefile` и скрипты в `deploy/scripts/`.
+Production-деплой на **Debian/Ubuntu** с автоматизацией через `Makefile` и скрипты в `deploy/scripts/`.  
+Актуальная версия панели: **1.0.0** (см. `pyproject.toml` / `panel.__version__`).
 
 ## Архитектура
 

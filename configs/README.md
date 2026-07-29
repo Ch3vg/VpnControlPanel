@@ -22,3 +22,5 @@
 **Legacy:** `active_config_path` должен совпадать с `-config` в unit-файле VPN-сервиса.
 
 Перед production настройте шаблоны под свой сервер: routing, `dest`/`serverNames`, пути к сертификатам, порт SOCKS-петли в `client-in-loop` (если не 51820).
+
+Самоподписанные сертификаты (gRPC / Hysteria2) выпускаются с DNS SAN `vpn-panel` и хранятся per-config рядом с live-конфигом. Secure share отдаёт fingerprint (`pinSHA256` / `pcs`) для клиентов без `insecure`.
