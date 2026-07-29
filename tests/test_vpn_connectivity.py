@@ -80,6 +80,37 @@ def test_build_xray_grpc_client_uses_pinned_peer_cert_sha256(panel_settings) -> 
     assert "pinnedPeerCertChainSha256" not in tls
 
 
+def test_build_hysteria_client_decrypts_auth_password(panel_settings) -> None:
+    from panel.infrastructure.crypto import FieldEncryptor
+    from panel.infrastructure.vpn.vpn_connectivity import _build_hysteria_client_config
+
+    plain_password = "super-secret-hy2-password"
+    encryptor = FieldEncryptor(panel_settings.security.encryption_key)
+    snapshot = ConfigVersionSnapshot(
+        config_id=uuid.uuid4(),
+        protocol=VpnProtocolType.HYSTERIA2,
+        profile=ConfigProfile.HYSTERIA2,
+        name="hy2",
+        version=1,
+        port=8443,
+        public_key="",
+        cert_fingerprint="cd" * 32,
+        config_data={
+            "listen": ":8443",
+            "auth": {"type": "password", "password": encryptor.encrypt(plain_password)},
+            "tls": {"cert": "/tmp/c.pem", "key": "/tmp/k.pem"},
+        },
+    )
+    client = _build_hysteria_client_config(
+        snapshot,
+        host="vpn.example.com",
+        socks_port=19081,
+        settings=panel_settings,
+    )
+    assert client["auth"] == plain_password
+    assert not str(client["auth"]).startswith("gAAAA")
+
+
 def test_probe_config_connectivity_success(panel_settings, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     snapshot = _reality_snapshot(panel_settings)
     fake_xray = tmp_path / "xray"

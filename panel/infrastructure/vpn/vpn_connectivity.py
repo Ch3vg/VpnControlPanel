@@ -15,8 +15,11 @@ import yaml
 
 from panel.config import PanelSettings
 from panel.domain.value_objects.config_profile import ConfigProfile
+from panel.infrastructure.crypto import FieldEncryptor
+from panel.infrastructure.crypto.config_data import decrypt_config_data_fields
 from panel.infrastructure.persistence.repositories.vpn_config import ConfigVersionSnapshot
 from panel.infrastructure.vpn.client_uri import _pin_hex
+from panel.infrastructure.vpn.config_builder import ProfileConfigBuilder
 from panel.infrastructure.vpn.service_runtime import is_tcp_port_open
 from panel.infrastructure.vpn.template_loader import find_inbound
 
@@ -28,6 +31,21 @@ class VpnConnectivityProbe:
 
 
 _CACHE: dict[tuple[uuid.UUID, int], tuple[float, VpnConnectivityProbe]] = {}
+
+
+def _plaintext_config_data(snapshot: ConfigVersionSnapshot, settings: PanelSettings) -> dict[str, Any]:
+    """Decrypt sensitive fields stored encrypted in DB (e.g. Hysteria auth.password).
+
+    Xray probe clients only need public client id / stream settings that stay plaintext;
+    Reality privateKey is encrypted but unused here, so skip decrypt for non-Hysteria.
+    """
+    if snapshot.profile is not ConfigProfile.HYSTERIA2:
+        return snapshot.config_data
+    paths = ProfileConfigBuilder(settings).sensitive_fields(snapshot.profile)
+    if not paths:
+        return snapshot.config_data
+    encryptor = FieldEncryptor(settings.security.encryption_key)
+    return decrypt_config_data_fields(snapshot.config_data, paths, encryptor)
 
 
 def _pick_free_tcp_port() -> int:
@@ -109,7 +127,8 @@ def _build_xray_client_config(
     settings: PanelSettings,
 ) -> dict[str, Any]:
     profile_settings = settings.vpn.profiles[snapshot.profile.value]
-    inbound = find_inbound(snapshot.config_data, profile_settings.inbound_tag)
+    config_data = _plaintext_config_data(snapshot, settings)
+    inbound = find_inbound(config_data, profile_settings.inbound_tag)
     client = inbound["settings"]["clients"][0]
     client_id = str(client["id"])
     stream = inbound["streamSettings"]
@@ -200,8 +219,9 @@ def _build_hysteria_client_config(
     *,
     host: str,
     socks_port: int,
+    settings: PanelSettings,
 ) -> dict[str, Any]:
-    config_data = snapshot.config_data
+    config_data = _plaintext_config_data(snapshot, settings)
     password = str(config_data["auth"]["password"])
     sni = config_data.get("sni") or config_data.get("tls", {}).get("sni") or "vpn-panel"
     tls: dict[str, Any] = {"sni": str(sni), "insecure": False}
@@ -266,7 +286,9 @@ def _probe_via_hysteria(snapshot: ConfigVersionSnapshot, settings: PanelSettings
         return VpnConnectivityProbe(reachable=None, detail="vpn.public_host is empty")
 
     socks_port = _pick_free_tcp_port()
-    client_config = _build_hysteria_client_config(snapshot, host=host, socks_port=socks_port)
+    client_config = _build_hysteria_client_config(
+        snapshot, host=host, socks_port=socks_port, settings=settings,
+    )
     timeout = settings.vpn.connectivity_probe_timeout_seconds
 
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as handle:
