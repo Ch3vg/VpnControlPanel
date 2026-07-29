@@ -4,6 +4,7 @@ import uuid
 from unittest.mock import patch
 
 import pytest
+from cryptography import x509
 
 from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.infrastructure.crypto.config_data import encrypt_config_data_fields
@@ -56,7 +57,7 @@ def test_hysteria2_writes_cert_paths(panel_settings, tmp_path) -> None:
     assert result.extra_files["key"]
 
 
-def test_hysteria2_regenerate_keeps_password_and_cert(panel_settings) -> None:
+def test_hysteria2_regenerate_keeps_password_and_san_cert(panel_settings) -> None:
     builder = ProfileConfigBuilder(panel_settings)
     first = builder.build(ConfigProfile.HYSTERIA2, name="Office")
     second = builder.build(
@@ -73,6 +74,52 @@ def test_hysteria2_regenerate_keeps_password_and_cert(panel_settings) -> None:
     assert second.cert_fingerprint == first.cert_fingerprint
     assert second.private_key == first.private_key
     assert second.public_key == first.public_key
+
+
+def test_hysteria2_regenerate_replaces_legacy_cn_only_cert(panel_settings) -> None:
+    """Old CN-only certs must not be reused — Go TLS rejects them."""
+    import datetime
+
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    from panel.infrastructure.vpn.crypto_utils import cert_has_dns_san
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "vpn-panel")])
+    legacy = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.now(datetime.UTC))
+        .not_valid_after(datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=1))
+        .sign(key, hashes.SHA256())
+    )
+    legacy_pem = legacy.public_bytes(serialization.Encoding.PEM).decode("utf-8")
+    private_pem = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("utf-8")
+
+    builder = ProfileConfigBuilder(panel_settings)
+    result = builder.build(
+        ConfigProfile.HYSTERIA2,
+        name="Office",
+        previous=PreviousSecrets(
+            password="keep-me",
+            private_key=private_pem,
+            public_key=legacy_pem,
+            cert_fingerprint="aa" * 32,
+        ),
+    )
+    assert result.config_data["auth"]["password"] == "keep-me"
+    assert result.public_key != legacy_pem
+    assert result.cert_fingerprint != "aa" * 32
+    assert cert_has_dns_san(result.public_key) is True
 
 
 def test_write_files_per_config_certs_are_isolated(panel_settings, tmp_path, monkeypatch) -> None:

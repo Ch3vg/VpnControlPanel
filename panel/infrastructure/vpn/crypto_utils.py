@@ -55,3 +55,18 @@ def generate_token(length: int = 32) -> str:
 
 def to_base64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
+
+
+def cert_has_dns_san(cert_pem: str, *, required_name: str | None = "vpn-panel") -> bool:
+    """Return True if cert has DNS SANs (optionally requiring a specific name)."""
+    try:
+        cert = x509.load_pem_x509_certificate(cert_pem.encode("utf-8"))
+        san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    except (ValueError, x509.ExtensionNotFound):
+        return False
+    names = san.get_values_for_type(x509.DNSName)
+    if not names:
+        return False
+    if required_name is None:
+        return True
+    return required_name in names

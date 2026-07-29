@@ -21,3 +21,29 @@ def test_generate_self_signed_cert_extra_dns_names() -> None:
     )
     assert names[0] == "vpn-panel"
     assert "vpn.example.com" in names
+
+
+def test_cert_has_dns_san_rejects_cn_only() -> None:
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+    import datetime
+
+    from panel.infrastructure.vpn.crypto_utils import cert_has_dns_san
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "vpn-panel")])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.now(datetime.UTC))
+        .not_valid_after(datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=1))
+        .sign(key, hashes.SHA256())
+    )
+    pem = cert.public_bytes(serialization.Encoding.PEM).decode("utf-8")
+    assert cert_has_dns_san(pem) is False
+    _k, good_pem, _fp = generate_self_signed_cert()
+    assert cert_has_dns_san(good_pem) is True

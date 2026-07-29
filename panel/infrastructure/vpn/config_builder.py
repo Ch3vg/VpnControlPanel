@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric import x25519
 from panel.config import PanelSettings, VpnProfileSettings
 from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.infrastructure.filesystem.writer import atomic_write
-from panel.infrastructure.vpn.crypto_utils import generate_self_signed_cert, to_base64
+from panel.infrastructure.vpn.crypto_utils import cert_has_dns_san, generate_self_signed_cert, to_base64
 from panel.infrastructure.vpn.port_picker import pick_port
 from panel.infrastructure.vpn.client_uri import build_share_uris
 from panel.infrastructure.vpn.template_loader import find_inbound, load_template, set_client_id
@@ -374,6 +374,7 @@ def _tls_material(previous: PreviousSecrets | None) -> tuple[str, str, str]:
         and previous.private_key
         and previous.public_key
         and previous.cert_fingerprint
+        and cert_has_dns_san(previous.public_key)
     ):
         return previous.private_key, previous.public_key, previous.cert_fingerprint
     return generate_self_signed_cert()
