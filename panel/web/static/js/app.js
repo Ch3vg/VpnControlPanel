@@ -230,7 +230,14 @@ function runtimeStatusLine(status) {
   if (status?.runtime_online !== true && status?.runtime_online !== false) {
     return "";
   }
-  const label = status.runtime_online ? "VPN доступен" : "VPN недоступен";
+  let label;
+  if (status.runtime_online) {
+    label = "VPN доступен";
+  } else if (status.runtime_systemd_active) {
+    label = "Сервис запущен, проверка не прошла";
+  } else {
+    label = "VPN недоступен";
+  }
   const badge = status.runtime_online ? statusBadge("active", label) : statusBadge("offline", label);
   const detail = status.runtime_detail ? `<span class="muted">${escapeHtml(status.runtime_detail)}</span>` : "";
   return `<div class="runtime-status">${badge} ${detail}</div>`;

@@ -150,7 +150,7 @@ class VpnSettings(BaseModel):
     connectivity_probe_enabled: bool = True
     connectivity_probe_timeout_seconds: float = Field(default=12.0, ge=3, le=60)
     connectivity_probe_cache_seconds: int = Field(default=60, ge=5, le=600)
-    connectivity_probe_url: str = "https://www.cloudflare.com/cdn-cgi/trace"
+    connectivity_probe_url: str = "https://ya.ru/"
     profiles: dict[str, VpnProfileSettings] = Field(default_factory=dict)
     xray: VpnServiceSettings | None = None
     hysteria2: VpnServiceSettings | None = None

@@ -205,3 +205,4 @@ async def test_regenerate_worker_creates_version_two(
         assert len(rows) == 2
         assert rows[0].version == 1
         assert rows[1].version == 2
+        assert rows[1].port != rows[0].port

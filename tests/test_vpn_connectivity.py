@@ -54,6 +54,32 @@ def test_build_xray_reality_client_uses_public_host(panel_settings) -> None:
     assert client["inbounds"][0]["port"] == 19080
 
 
+def test_build_xray_grpc_client_uses_pinned_peer_cert_sha256(panel_settings) -> None:
+    template_path = panel_settings.paths.templates / "config_grpc.json"
+    config_data = json.loads(template_path.read_text(encoding="utf-8"))
+    config_data["inbounds"][0]["streamSettings"]["tlsSettings"]["serverName"] = "pochta.ru"
+    snapshot = ConfigVersionSnapshot(
+        config_id=uuid.uuid4(),
+        protocol=VpnProtocolType.XRAY,
+        profile=ConfigProfile.XRAY_GRPC,
+        name="grpc",
+        version=1,
+        port=8443,
+        public_key="",
+        cert_fingerprint="ab" * 32,
+        config_data=config_data,
+    )
+    client = _build_xray_client_config(
+        snapshot,
+        host="vpn.example.com",
+        socks_port=19080,
+        settings=panel_settings,
+    )
+    tls = client["outbounds"][0]["streamSettings"]["tlsSettings"]
+    assert tls["pinnedPeerCertSha256"] == ("AB" * 32)
+    assert "pinnedPeerCertChainSha256" not in tls
+
+
 def test_probe_config_connectivity_success(panel_settings, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     snapshot = _reality_snapshot(panel_settings)
     fake_xray = tmp_path / "xray"

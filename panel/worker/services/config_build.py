@@ -63,14 +63,12 @@ async def build_and_persist_version(
                 )
                 break
 
-    used_ports = await repo.list_used_ports(exclude_config_id=config_id)
-    reuse_port = previous_port is not None and previous_port in profile_settings.port_candidates
+    used_ports = set(await repo.list_used_ports(exclude_config_id=config_id))
+    # Regenerate always picks a new free port; exclude the previous one so it changes.
+    if previous_port is not None:
+        used_ports.add(previous_port)
 
-    if (
-        target_version > 1
-        and ctx.settings.systemd.per_config
-        and not reuse_port
-    ):
+    if target_version > 1 and ctx.settings.systemd.per_config:
         await asyncio.to_thread(
             stop_config_unit,
             config_id,
@@ -82,7 +80,7 @@ async def build_and_persist_version(
         name=name,
         previous=previous,
         exclude_ports=used_ports,
-        preferred_port=previous_port,
+        preferred_port=None,
         preferred_grpc_sni=preferred_grpc_sni,
     )
     result.port = listening_port(profile, result.config_data, profile_settings)

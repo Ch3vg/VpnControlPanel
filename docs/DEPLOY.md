@@ -96,7 +96,7 @@ make render    # → deploy/output/
 | `VCP_CONNECTIVITY_PROBE_ENABLED` | Реальная проверка VPN через клиент | `true` |
 | `VCP_CONNECTIVITY_PROBE_TIMEOUT_SECONDS` | Таймаут probe (сек) | `12` |
 | `VCP_CONNECTIVITY_PROBE_CACHE_SECONDS` | Кэш результата probe (сек) | `60` |
-| `VCP_CONNECTIVITY_PROBE_URL` | URL для curl через SOCKS | Cloudflare trace |
+| `VCP_CONNECTIVITY_PROBE_URL` | URL для curl через SOCKS (лучше `.ru` — идёт в `direct-out`) | `https://ya.ru/` |
 | `VCP_NGINX_SSL` | HTTPS :443 (`1`) или только HTTP :80 (`0`) | `0` |
 | `VCP_ADMIN_USERNAME` | Первый админ | `admin` |
 

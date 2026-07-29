@@ -159,7 +159,8 @@ def _build_xray_client_config(
         }
         pin = _pin_hex(snapshot.cert_fingerprint)
         if pin:
-            tls_settings["pinnedPeerCertChainSha256"] = [pin]
+            # Modern Xray: hex fingerprint string (same as share URI pcs=).
+            tls_settings["pinnedPeerCertSha256"] = pin
         outbound["streamSettings"]["security"] = "tls"
         outbound["streamSettings"]["tlsSettings"] = tls_settings
         outbound["streamSettings"]["grpcSettings"] = {
@@ -242,6 +243,7 @@ def _probe_via_xray(snapshot: ConfigVersionSnapshot, settings: PanelSettings) ->
         )
         if not _wait_for_port(socks_port, timeout=min(5.0, timeout)):
             return VpnConnectivityProbe(reachable=False, detail="local socks proxy did not start")
+        time.sleep(0.5)
         ok, detail = _curl_via_socks(socks_port, settings.vpn.connectivity_probe_url, timeout=timeout)
         if ok:
             return VpnConnectivityProbe(reachable=True)
@@ -280,6 +282,7 @@ def _probe_via_hysteria(snapshot: ConfigVersionSnapshot, settings: PanelSettings
         )
         if not _wait_for_port(socks_port, timeout=min(5.0, timeout)):
             return VpnConnectivityProbe(reachable=False, detail="local socks proxy did not start")
+        time.sleep(0.5)
         ok, detail = _curl_via_socks(socks_port, settings.vpn.connectivity_probe_url, timeout=timeout)
         if ok:
             return VpnConnectivityProbe(reachable=True)
@@ -300,22 +303,30 @@ def probe_config_connectivity(
         return VpnConnectivityProbe(reachable=None)
 
     cache_key = (snapshot.config_id, snapshot.version)
-    cache_ttl = settings.vpn.connectivity_probe_cache_seconds
+    success_ttl = settings.vpn.connectivity_probe_cache_seconds
+    # Failures expire sooner so a flake does not stick in the UI for a full minute.
+    failure_ttl = min(15, success_ttl)
     now = time.monotonic()
     cached = _CACHE.get(cache_key)
-    if cached is not None and now - cached[0] < cache_ttl:
-        return cached[1]
+    if cached is not None:
+        cached_at, cached_probe = cached
+        ttl = success_ttl if cached_probe.reachable is True else failure_ttl
+        if now - cached_at < ttl:
+            return cached_probe
 
-    if snapshot.profile is ConfigProfile.HYSTERIA2:
-        probe = _probe_via_hysteria(snapshot, settings)
-    elif snapshot.profile in {
-        ConfigProfile.XRAY_REALITY,
-        ConfigProfile.XRAY_GRPC,
-        ConfigProfile.XRAY_XHTTP,
-    }:
-        probe = _probe_via_xray(snapshot, settings)
-    else:
-        probe = VpnConnectivityProbe(reachable=None, detail=f"unsupported profile: {snapshot.profile}")
+    try:
+        if snapshot.profile is ConfigProfile.HYSTERIA2:
+            probe = _probe_via_hysteria(snapshot, settings)
+        elif snapshot.profile in {
+            ConfigProfile.XRAY_REALITY,
+            ConfigProfile.XRAY_GRPC,
+            ConfigProfile.XRAY_XHTTP,
+        }:
+            probe = _probe_via_xray(snapshot, settings)
+        else:
+            probe = VpnConnectivityProbe(reachable=None, detail=f"unsupported profile: {snapshot.profile}")
+    except Exception as exc:  # noqa: BLE001 — probe must never break status API
+        probe = VpnConnectivityProbe(reachable=False, detail=f"probe error: {exc}"[:240])
 
     _CACHE[cache_key] = (now, probe)
     return probe
