@@ -290,8 +290,8 @@ Append-only. События `share.accessed` не пишутся на кажды
 
 ```
 vless://...@host:8444?type=tcp&security=reality&flow=xtls-rprx-vision&fp=chrome&pbk=...&sid=...&sni=...&fragment=true#Reality-Dynamic
-vless://...@host:81?type=xhttp&security=none&host=...&path=/download&mode=packet-up#XHTTP-Dynamic
-hysteria2://...@host:443?sni=vpn-panel&pinSHA256=...&insecure=0#Hysteria2-Dynamic
+vless://...@host:81?type=xhttp&security=tls&host=...&path=/download&mode=packet-up&fingerprint=randomized&sni=chevg.ignorelist.com&pcs=...&insecure=0#XHTTP-Dynamic
+hysteria2://...@host:443?sni=chevg.ignorelist.com&obfs=salamander&obfs-password=...&pinSHA256=...&insecure=0#Hysteria2-Dynamic
 ```
 
 Secure-ссылки для самоподписанных TLS (Hysteria2, gRPC) рассчитаны на клиентов с pin (`pinSHA256` / `pcs`).  

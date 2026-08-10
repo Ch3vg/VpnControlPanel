@@ -20,7 +20,7 @@ class Hysteria2Protocol(VpnProtocol):
         self._service = service
 
     def generate_keys(self) -> KeyPair:
-        private_pem, cert_pem, fingerprint = generate_self_signed_cert()
+        private_pem, cert_pem, fingerprint = generate_self_signed_cert(dns_names=["localhost"])
         return KeyPair(
             private_key=private_pem,
             public_key=cert_pem,

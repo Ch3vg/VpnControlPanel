@@ -40,6 +40,7 @@ async def build_and_persist_version(
             if encrypted_private and snapshot.profile in {
                 ConfigProfile.XRAY_REALITY,
                 ConfigProfile.XRAY_GRPC,
+                ConfigProfile.XRAY_XHTTP,
                 ConfigProfile.HYSTERIA2,
             }:
                 private_plain = ctx.encryptor.decrypt(encrypted_private)
@@ -57,15 +58,14 @@ async def build_and_persist_version(
             )
 
     preferred_grpc_sni: str | None = None
+    preferred_grpc_service_name: str | None = None
     if snapshot is not None and profile is ConfigProfile.XRAY_GRPC and config_plain is not None:
         inbound_tag = profile_settings.inbound_tag
         for inbound in config_plain.get("inbounds", []):
             if inbound.get("tag") == inbound_tag:
-                preferred_grpc_sni = (
-                    inbound.get("streamSettings", {})
-                    .get("tlsSettings", {})
-                    .get("serverName")
-                )
+                stream = inbound.get("streamSettings", {})
+                preferred_grpc_sni = stream.get("tlsSettings", {}).get("serverName")
+                preferred_grpc_service_name = stream.get("grpcSettings", {}).get("serviceName")
                 break
 
     used_ports = set(await repo.list_used_ports(exclude_config_id=config_id))
@@ -87,6 +87,7 @@ async def build_and_persist_version(
         exclude_ports=used_ports,
         preferred_port=None,
         preferred_grpc_sni=preferred_grpc_sni,
+        preferred_grpc_service_name=preferred_grpc_service_name,
     )
     result.port = listening_port(profile, result.config_data, profile_settings)
     await asyncio.to_thread(

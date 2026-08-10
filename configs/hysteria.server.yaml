@@ -1,9 +1,13 @@
 auth:
   type: password
   password: placeholder
-listen: :443
+listen: :8443
 log:
-  level: debug
+  level: warn
+obfs:
+  type: salamander
+  salamander:
+    password: placeholder
 outbounds:
   - name: xray-socks
     type: socks5
@@ -13,3 +17,4 @@ speedLimit: 0
 tls:
   cert: /usr/local/etc/xray/certs/hysteria-cert.pem
   key: /usr/local/etc/xray/certs/hysteria-key.pem
+  sni: ""

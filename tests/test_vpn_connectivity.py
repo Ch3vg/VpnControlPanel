@@ -80,6 +80,34 @@ def test_build_xray_grpc_client_uses_pinned_peer_cert_sha256(panel_settings) -> 
     assert "pinnedPeerCertChainSha256" not in tls
 
 
+def test_build_xray_xhttp_client_uses_tls_pin(panel_settings) -> None:
+    template_path = panel_settings.paths.templates / "config_xhttp.json"
+    config_data = json.loads(template_path.read_text(encoding="utf-8"))
+    snapshot = ConfigVersionSnapshot(
+        config_id=uuid.uuid4(),
+        protocol=VpnProtocolType.XRAY,
+        profile=ConfigProfile.XRAY_XHTTP,
+        name="xhttp",
+        version=1,
+        port=8080,
+        public_key="",
+        cert_fingerprint="ab" * 32,
+        config_data=config_data,
+    )
+    client = _build_xray_client_config(
+        snapshot,
+        host="vpn.example.com",
+        socks_port=19080,
+        settings=panel_settings,
+    )
+    stream = client["outbounds"][0]["streamSettings"]
+    assert stream["security"] == "tls"
+    assert stream["tlsSettings"]["serverName"] == "vpn.example.com"
+    assert stream["tlsSettings"]["fingerprint"] == "randomized"
+    assert stream["tlsSettings"]["pinnedPeerCertSha256"] == ("AB" * 32)
+    assert stream["xhttpSettings"]["path"]
+
+
 def test_build_hysteria_client_decrypts_auth_password(panel_settings, tmp_path) -> None:
     from panel.infrastructure.crypto import FieldEncryptor
     from panel.infrastructure.vpn.vpn_connectivity import _build_hysteria_client_config

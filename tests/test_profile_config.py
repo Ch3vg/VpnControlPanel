@@ -19,8 +19,14 @@ def test_xray_reality_template_build(panel_settings) -> None:
     inbound = result.config_data["inbounds"][0]
     assert inbound["tag"] == "vless-reality-in"
     assert inbound["port"] == result.port
-    assert len(inbound["streamSettings"]["realitySettings"]["shortIds"]) == 3
-    assert inbound["streamSettings"]["realitySettings"]["privateKey"]
+    reality = inbound["streamSettings"]["realitySettings"]
+    assert len(reality["shortIds"]) == 3
+    assert reality["privateKey"]
+    assert reality["dest"] in panel_settings.vpn.profiles["xray-reality"].reality_dest_hosts
+    assert reality["serverNames"][0] == ""
+    assert set(reality["serverNames"][1:]) == set(
+        panel_settings.vpn.profiles["xray-reality"].reality_server_names
+    )
     assert result.client_id
     assert result.config_data["routing"]["rules"][-1]["inboundTag"] == ["vless-reality-in"]
 
@@ -48,11 +54,43 @@ def test_xray_reality_regenerate_keeps_keys(panel_settings) -> None:
     )
 
 
+def test_xray_xhttp_tls_and_regenerate_keeps_cert(panel_settings) -> None:
+    builder = ProfileConfigBuilder(panel_settings)
+    first = builder.build(ConfigProfile.XRAY_XHTTP, name="Office")
+    stream = first.config_data["inbounds"][0]["streamSettings"]
+    sni = panel_settings.vpn.public_host
+    assert stream["security"] == "tls"
+    assert stream["tlsSettings"]["serverName"] == sni
+    assert stream["tlsSettings"]["alpn"] == ["h2", "http/1.1"]
+    assert first.cert_fingerprint
+    assert first.extra_files["cert"]
+    assert first.extra_files["key"]
+
+    second = builder.build(
+        ConfigProfile.XRAY_XHTTP,
+        name="Office",
+        previous=PreviousSecrets(
+            client_id=first.client_id,
+            private_key=first.private_key,
+            public_key=first.public_key,
+            cert_fingerprint=first.cert_fingerprint,
+        ),
+    )
+    assert second.client_id == first.client_id
+    assert second.cert_fingerprint == first.cert_fingerprint
+    assert second.private_key == first.private_key
+    assert second.public_key == first.public_key
+
+
 def test_hysteria2_writes_cert_paths(panel_settings, tmp_path) -> None:
     builder = ProfileConfigBuilder(panel_settings)
     result = builder.build(ConfigProfile.HYSTERIA2, name="Office")
     assert result.config_data["tls"]["cert"].endswith("hysteria-cert.pem")
     assert result.config_data["tls"]["key"].endswith("hysteria-key.pem")
+    assert result.config_data["tls"]["sni"] == panel_settings.vpn.public_host
+    assert result.config_data["obfs"]["type"] == "salamander"
+    assert result.config_data["obfs"]["salamander"]["password"]
+    assert result.config_data["log"]["level"] == "warn"
     assert result.extra_files["cert"]
     assert result.extra_files["key"]
 
@@ -65,12 +103,14 @@ def test_hysteria2_regenerate_keeps_password_and_san_cert(panel_settings) -> Non
         name="Office",
         previous=PreviousSecrets(
             password=first.config_data["auth"]["password"],
+            obfs_password=first.config_data["obfs"]["salamander"]["password"],
             private_key=first.private_key,
             public_key=first.public_key,
             cert_fingerprint=first.cert_fingerprint,
         ),
     )
     assert second.config_data["auth"]["password"] == first.config_data["auth"]["password"]
+    assert second.config_data["obfs"]["salamander"]["password"] == first.config_data["obfs"]["salamander"]["password"]
     assert second.cert_fingerprint == first.cert_fingerprint
     assert second.private_key == first.private_key
     assert second.public_key == first.public_key
@@ -87,7 +127,7 @@ def test_hysteria2_regenerate_replaces_legacy_cn_only_cert(panel_settings) -> No
     from panel.infrastructure.vpn.crypto_utils import cert_has_dns_san
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "vpn-panel")])
+    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "legacy-cn")])
     legacy = (
         x509.CertificateBuilder()
         .subject_name(subject)

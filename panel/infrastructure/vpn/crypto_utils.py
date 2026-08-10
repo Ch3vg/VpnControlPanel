@@ -18,8 +18,8 @@ def generate_self_signed_cert(*, dns_names: list[str] | None = None) -> tuple[st
     CN-only certificates with "legacy Common Name field".
     """
     names = [n.strip() for n in (dns_names or []) if n and str(n).strip()]
-    if "vpn-panel" not in names:
-        names.insert(0, "vpn-panel")
+    if not names:
+        raise ValueError("dns_names must contain at least one name for the certificate SAN")
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, names[0])])
@@ -57,7 +57,7 @@ def to_base64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
 
 
-def cert_has_dns_san(cert_pem: str, *, required_name: str | None = "vpn-panel") -> bool:
+def cert_has_dns_san(cert_pem: str, *, required_name: str | None = None) -> bool:
     """Return True if cert has DNS SANs (optionally requiring a specific name)."""
     try:
         cert = x509.load_pem_x509_certificate(cert_pem.encode("utf-8"))

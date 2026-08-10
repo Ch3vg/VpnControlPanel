@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from typing import Any
 from urllib.parse import quote
 
@@ -13,13 +14,19 @@ _SHARE_LABELS: dict[ConfigProfile, str] = {
     ConfigProfile.HYSTERIA2: "Hysteria2-Dynamic",
 }
 
+_REALITY_FINGERPRINTS = ("chrome", "firefox", "safari", "randomized")
 
-def _pick_server_name(names: list[Any]) -> str:
-    for name in names:
-        text = str(name).strip()
-        if text:
-            return text
-    return ""
+
+def pick_server_name(names: list[Any]) -> str:
+    """Pick a random non-empty serverName; empty string is skipped."""
+    candidates = [str(name).strip() for name in names if str(name).strip()]
+    if not candidates:
+        return ""
+    return random.choice(candidates)
+
+
+def pick_reality_fingerprint() -> str:
+    return random.choice(_REALITY_FINGERPRINTS)
 
 
 def _pin_hex(cert_fingerprint: str) -> str:
@@ -56,7 +63,17 @@ def build_share_uris(
     if profile is ConfigProfile.XRAY_REALITY:
         return [_build_reality_uri(inbound, client_id, host, port, public_key, label, secure=secure)]
     if profile is ConfigProfile.XRAY_XHTTP:
-        return [_build_xhttp_uri(inbound, client_id, host, port, label)]
+        return [
+            _build_xhttp_uri(
+                inbound,
+                client_id,
+                host,
+                port,
+                cert_fingerprint,
+                label,
+                secure=secure,
+            ),
+        ]
     if profile is ConfigProfile.XRAY_GRPC:
         return [
             _build_grpc_uri(
@@ -85,13 +102,14 @@ def _build_reality_uri(
     reality = inbound["streamSettings"]["realitySettings"]
     short_id = reality["shortIds"][0]
     flow = inbound["settings"]["clients"][0].get("flow", "xtls-rprx-vision")
-    sni = _pick_server_name(reality.get("serverNames", []))
+    sni = pick_server_name(reality.get("serverNames", []))
+    fp = pick_reality_fingerprint()
 
     params = [
         "type=tcp",
         "security=reality",
         f"flow={flow}",
-        "fp=chrome",
+        f"fp={fp}",
         f"pbk={public_key}",
         f"sid={short_id}",
     ]
@@ -107,19 +125,33 @@ def _build_xhttp_uri(
     client_id: str,
     host: str,
     port: int,
+    cert_fingerprint: str,
     label: str,
+    *,
+    secure: bool,
 ) -> str:
     xhttp = inbound["streamSettings"]["xhttpSettings"]
+    tls = inbound["streamSettings"].get("tlsSettings") or {}
     xhost = xhttp.get("host", host)
     path = xhttp.get("path", "/")
     mode = xhttp.get("mode", "packet-up")
+    sni = tls.get("serverName") or host
     params = [
         "type=xhttp",
-        "security=none",
+        "security=tls",
         f"host={quote(str(xhost), safe='')}",
         f"path={quote(str(path), safe='')}",
         f"mode={quote(str(mode), safe='')}",
+        "fingerprint=randomized",
+        f"sni={quote(str(sni), safe='')}",
     ]
+    if secure:
+        pcs = _pin_hex(cert_fingerprint)
+        if pcs:
+            params.append(f"pcs={pcs}")
+        params.append("insecure=0")
+    else:
+        params.append("insecure=1")
     return f"vless://{client_id}@{host}:{port}?{'&'.join(params)}#{quote(label)}"
 
 
@@ -165,8 +197,16 @@ def _build_hysteria2_uri(
 ) -> str:
     port = int(str(config_data["listen"]).lstrip(":"))
     password = config_data["auth"]["password"]
-    sni = config_data.get("sni") or config_data.get("tls", {}).get("sni") or "vpn-panel"
+    sni = config_data.get("sni") or config_data.get("tls", {}).get("sni") or host
     params = [f"sni={quote(str(sni), safe='')}"]
+
+    obfs = config_data.get("obfs") or {}
+    if str(obfs.get("type", "")).strip().lower() == "salamander":
+        obfs_password = (obfs.get("salamander") or {}).get("password")
+        if obfs_password:
+            params.append("obfs=salamander")
+            params.append(f"obfs-password={quote(str(obfs_password), safe='')}")
+
     if secure:
         # URI scheme has no `ca=` param. pinSHA256 + insecure=0 is the secure share form;
         # clients that trust the pin (or import the cert) connect without insecure mode.

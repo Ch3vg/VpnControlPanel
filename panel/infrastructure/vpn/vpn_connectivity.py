@@ -55,11 +55,9 @@ def _pick_free_tcp_port() -> int:
 
 
 def _first_server_name(names: list[Any]) -> str:
-    for name in names:
-        text = str(name).strip()
-        if text:
-            return text
-    return ""
+    from panel.infrastructure.vpn.client_uri import pick_server_name
+
+    return pick_server_name(names)
 
 
 def _find_curl() -> str | None:
@@ -212,9 +210,11 @@ def _build_xray_client_config(
     if snapshot.profile is ConfigProfile.XRAY_REALITY:
         reality = stream["realitySettings"]
         users[0]["flow"] = client.get("flow", "xtls-rprx-vision")
+        from panel.infrastructure.vpn.client_uri import pick_reality_fingerprint
+
         outbound["streamSettings"]["realitySettings"] = {
             "serverName": _first_server_name(reality.get("serverNames", [])),
-            "fingerprint": "chrome",
+            "fingerprint": pick_reality_fingerprint(),
             "publicKey": snapshot.public_key,
             "shortId": str(reality["shortIds"][0]),
         }
@@ -237,7 +237,18 @@ def _build_xray_client_config(
         }
     elif snapshot.profile is ConfigProfile.XRAY_XHTTP:
         xhttp = stream["xhttpSettings"]
-        outbound["streamSettings"]["security"] = "none"
+        tls = stream.get("tlsSettings") or {}
+        sni = str(tls.get("serverName") or "").strip() or host
+        tls_settings: dict[str, Any] = {
+            "serverName": sni,
+            "fingerprint": "randomized",
+            "alpn": list(tls.get("alpn") or ["h2", "http/1.1"]),
+        }
+        pin = _pin_hex(snapshot.cert_fingerprint)
+        if pin:
+            tls_settings["pinnedPeerCertSha256"] = pin
+        outbound["streamSettings"]["security"] = "tls"
+        outbound["streamSettings"]["tlsSettings"] = tls_settings
         outbound["streamSettings"]["xhttpSettings"] = {
             "host": xhttp.get("host", host),
             "path": xhttp.get("path", "/"),
@@ -274,7 +285,7 @@ def _build_hysteria_client_config(
 ) -> dict[str, Any]:
     config_data = _plaintext_config_data(snapshot, settings)
     password = str(config_data["auth"]["password"])
-    sni = config_data.get("sni") or config_data.get("tls", {}).get("sni") or "vpn-panel"
+    sni = config_data.get("sni") or config_data.get("tls", {}).get("sni") or host
     # Trust the panel-issued leaf via tls.ca (same idea as Xray pin), not insecure=.
     tls: dict[str, Any] = {"sni": str(sni), "insecure": False}
     if ca_path is not None:
@@ -282,13 +293,22 @@ def _build_hysteria_client_config(
     pin = _pin_hex(snapshot.cert_fingerprint)
     if pin:
         tls["pinSHA256"] = pin
-    return {
+    client: dict[str, Any] = {
         "server": f"{host}:{snapshot.port}",
         "auth": password,
         "tls": tls,
         "socks5": {"listen": f"127.0.0.1:{socks_port}"},
         "log": {"level": "warn"},
     }
+    obfs = config_data.get("obfs") or {}
+    if str(obfs.get("type", "")).strip().lower() == "salamander":
+        obfs_password = (obfs.get("salamander") or {}).get("password")
+        if obfs_password:
+            client["obfs"] = {
+                "type": "salamander",
+                "salamander": {"password": str(obfs_password)},
+            }
+    return client
 
 
 def _write_temp_ca(cert_pem: str) -> Path:

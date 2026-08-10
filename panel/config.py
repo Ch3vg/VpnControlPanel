@@ -138,6 +138,9 @@ class VpnProfileSettings(BaseModel):
     xhttp_hosts: list[str] = Field(default_factory=list)
     xhttp_paths: list[str] = Field(default_factory=list)
     grpc_sni_hosts: list[str] = Field(default_factory=list)
+    grpc_service_names: list[str] = Field(default_factory=list)
+    reality_dest_hosts: list[str] = Field(default_factory=list)
+    reality_server_names: list[str] = Field(default_factory=list)
 
 
 class VpnServiceSettings(BaseModel):

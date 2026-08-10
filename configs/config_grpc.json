@@ -23,8 +23,8 @@
           "serviceName": ""
         },
         "tlsSettings": {
-          "fingerprint": "firefox",
           "serverName": "",
+          "alpn": ["h2"],
           "certificates": [
             {
               "certificateFile": "/usr/local/etc/xray/certs/grpc-cert.pem",

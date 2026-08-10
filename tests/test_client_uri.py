@@ -1,8 +1,22 @@
 from __future__ import annotations
 
 from panel.domain.value_objects.config_profile import ConfigProfile
-from panel.infrastructure.vpn.client_uri import build_share_uris
+from panel.infrastructure.vpn.client_uri import (
+    _REALITY_FINGERPRINTS,
+    build_share_uris,
+    pick_reality_fingerprint,
+    pick_server_name,
+)
 from panel.infrastructure.vpn.config_builder import ProfileConfigBuilder
+
+
+def test_pick_server_name_skips_empty_and_uses_pool() -> None:
+    assert pick_server_name(["", "ya.ru", "vk.com"]) in {"ya.ru", "vk.com"}
+    assert pick_server_name([]) == ""
+
+
+def test_pick_reality_fingerprint_from_pool() -> None:
+    assert pick_reality_fingerprint() in _REALITY_FINGERPRINTS
 
 
 def test_reality_share_uri_format(panel_settings) -> None:
@@ -21,7 +35,7 @@ def test_reality_share_uri_format(panel_settings) -> None:
     assert "type=tcp" in uri
     assert "security=reality" in uri
     assert "flow=xtls-rprx-vision" in uri
-    assert "fp=chrome" in uri
+    assert any(f"fp={fp}" in uri for fp in _REALITY_FINGERPRINTS)
     assert f"pbk={result.public_key}" in uri
     assert "sid=" in uri
     assert "sni=" in uri
@@ -32,20 +46,50 @@ def test_reality_share_uri_format(panel_settings) -> None:
 def test_xhttp_share_uri_format(panel_settings) -> None:
     builder = ProfileConfigBuilder(panel_settings)
     result = builder.build(ConfigProfile.XRAY_XHTTP, name="ignored")
+    assert result.cert_fingerprint
+    assert result.private_key
+    inbound = result.config_data["inbounds"][0]
+    sni = panel_settings.vpn.public_host
+    assert inbound["streamSettings"]["security"] == "tls"
+    assert inbound["streamSettings"]["tlsSettings"]["serverName"] == sni
     uris = build_share_uris(
         ConfigProfile.XRAY_XHTTP,
         result.config_data,
         host="chevg.ignorelist.com",
         public_key="",
+        cert_fingerprint=result.cert_fingerprint,
         inbound_tag="vless-xhttp-in",
     )
     uri = uris[0]
     assert "type=xhttp" in uri
-    assert "security=none" in uri
+    assert "security=tls" in uri
     assert "host=" in uri
     assert "path=" in uri
     assert "mode=packet-up" in uri
+    assert f"sni={sni}" in uri
+    assert "vpn-panel" not in uri
+    assert "fingerprint=randomized" in uri
+    assert "pcs=" in uri
+    assert "insecure=0" in uri
     assert uri.endswith("#XHTTP-Dynamic")
+
+
+def test_xhttp_share_uri_insecure(panel_settings) -> None:
+    builder = ProfileConfigBuilder(panel_settings)
+    result = builder.build(ConfigProfile.XRAY_XHTTP, name="ignored")
+    uris = build_share_uris(
+        ConfigProfile.XRAY_XHTTP,
+        result.config_data,
+        host="chevg.ignorelist.com",
+        public_key="",
+        cert_fingerprint=result.cert_fingerprint,
+        inbound_tag="vless-xhttp-in",
+        secure=False,
+    )
+    uri = uris[0]
+    assert "pcs=" not in uri
+    assert "insecure=1" in uri
+    assert "security=tls" in uri
 
 
 def test_grpc_share_uri_format(panel_settings) -> None:
@@ -53,7 +97,11 @@ def test_grpc_share_uri_format(panel_settings) -> None:
     result = builder.build(ConfigProfile.XRAY_GRPC, name="ignored")
     inbound = result.config_data["inbounds"][0]
     sni = inbound["streamSettings"]["tlsSettings"]["serverName"]
+    service_name = inbound["streamSettings"]["grpcSettings"]["serviceName"]
     assert sni in panel_settings.vpn.profiles["xray-grpc"].grpc_sni_hosts
+    assert service_name in panel_settings.vpn.profiles["xray-grpc"].grpc_service_names
+    assert inbound["streamSettings"]["tlsSettings"]["alpn"] == ["h2"]
+    assert "fingerprint" not in inbound["streamSettings"]["tlsSettings"]
     uris = build_share_uris(
         ConfigProfile.XRAY_GRPC,
         result.config_data,
@@ -66,7 +114,7 @@ def test_grpc_share_uri_format(panel_settings) -> None:
     assert "type=grpc" in uri
     assert "security=tls" in uri
     assert f"sni={sni}" in uri
-    assert "serviceName=" in uri
+    assert f"serviceName={service_name}" in uri
     assert "fingerprint=randomized" in uri
     assert "pcs=" in uri
     assert "insecure=0" in uri
@@ -74,23 +122,27 @@ def test_grpc_share_uri_format(panel_settings) -> None:
     assert uri.endswith("#gRPC-Dynamic")
 
 
-def test_grpc_sni_preserved_on_regenerate(panel_settings, monkeypatch) -> None:
+def test_grpc_sni_and_service_preserved_on_regenerate(panel_settings, monkeypatch) -> None:
     monkeypatch.setattr(
         "panel.infrastructure.vpn.config_builder.random.choice",
-        lambda hosts: "gosuslugi.ru",
+        lambda hosts: "gosuslugi.ru" if "gosuslugi.ru" in hosts else "Api",
     )
     builder = ProfileConfigBuilder(panel_settings)
     first = builder.build(ConfigProfile.XRAY_GRPC, name="ignored")
     sni = first.config_data["inbounds"][0]["streamSettings"]["tlsSettings"]["serverName"]
+    service_name = first.config_data["inbounds"][0]["streamSettings"]["grpcSettings"]["serviceName"]
     assert sni == "gosuslugi.ru"
+    assert service_name == "Api"
 
     second = builder.build(
         ConfigProfile.XRAY_GRPC,
         name="ignored",
         preferred_grpc_sni=sni,
+        preferred_grpc_service_name=service_name,
     )
-    second_sni = second.config_data["inbounds"][0]["streamSettings"]["tlsSettings"]["serverName"]
-    assert second_sni == sni
+    second_inbound = second.config_data["inbounds"][0]["streamSettings"]
+    assert second_inbound["tlsSettings"]["serverName"] == sni
+    assert second_inbound["grpcSettings"]["serviceName"] == service_name
 
 
 def test_hysteria2_share_uri_insecure(panel_settings) -> None:
@@ -130,6 +182,7 @@ def test_grpc_share_uri_insecure(panel_settings) -> None:
 def test_hysteria2_share_uri_format(panel_settings) -> None:
     builder = ProfileConfigBuilder(panel_settings)
     result = builder.build(ConfigProfile.HYSTERIA2, name="ignored")
+    obfs_password = result.config_data["obfs"]["salamander"]["password"]
     uris = build_share_uris(
         ConfigProfile.HYSTERIA2,
         result.config_data,
@@ -139,7 +192,10 @@ def test_hysteria2_share_uri_format(panel_settings) -> None:
     )
     uri = uris[0]
     assert uri.startswith("hysteria2://")
-    assert "sni=" in uri
+    assert f"sni={panel_settings.vpn.public_host}" in uri
+    assert "vpn-panel" not in uri
+    assert "obfs=salamander" in uri
+    assert f"obfs-password={obfs_password}" in uri
     assert "pinSHA256=" in uri
     assert "insecure=0" in uri
     assert uri.endswith("#Hysteria2-Dynamic")
