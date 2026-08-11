@@ -1,0 +1,26 @@
+# Optional: share public TCP 443 between VCP HTTPS and Reality (SNI mux).
+# Installed to /etc/nginx/stream.d/vcp-shared-443.conf when VCP_NGINX_SHARED_443=1.
+#
+# Reality must listen on loopback (e.g. 127.0.0.1:10443), not 0.0.0.0:443.
+# Panel HTTPS must listen on loopback (e.0.0.1:8443), not public 443.
+#
+# Placeholders replaced at install time:
+#   __VCP_PANEL_DOMAIN__
+#   __VCP_PANEL_TLS_BACKEND__
+#   __VCP_REALITY_BACKEND__
+#   __VCP_REALITY_SNI_MAP_LINES__
+
+map $ssl_preread_server_name $vcp_443_backend {
+    __VCP_PANEL_DOMAIN__ __VCP_PANEL_TLS_BACKEND__;
+__VCP_REALITY_SNI_MAP_LINES__
+    default __VCP_PANEL_TLS_BACKEND__;
+}
+
+server {
+    listen 443 reuseport;
+    listen [::]:443 reuseport;
+    proxy_pass $vcp_443_backend;
+    ssl_preread on;
+    proxy_connect_timeout 10s;
+    proxy_timeout 300s;
+}

@@ -60,7 +60,10 @@ deploy/
 │   │   ├── vpn-api.service.in
 │   │   └── vpn-worker@.service.in
 │   ├── nginx/
-│   │   └── vpn-panel.conf.in
+│   │   ├── vpn-panel.conf.in           # HTTP :80
+│   │   ├── vpn-panel.ssl.conf.in       # HTTPS public :443
+│   │   ├── vpn-panel.shared443.conf.in # panel TLS on 127.0.0.1:8443
+│   │   └── vcp-shared-443.stream.conf.in  # SNI mux on public :443
 │   └── sudoers/
 │       └── vpn-worker.in       # NOPASSWD systemctl restart
 ├── scripts/                    # шаги деплоя
@@ -99,6 +102,10 @@ make render    # → deploy/output/
 | `VCP_CONNECTIVITY_PROBE_CACHE_SECONDS` | Кэш результата probe (сек) | `60` |
 | `VCP_CONNECTIVITY_PROBE_URL` | URL для curl через SOCKS (лучше `.ru` — идёт в `direct-out`) | `https://ya.ru/` |
 | `VCP_NGINX_SSL` | HTTPS :443 (`1`) или только HTTP :80 (`0`) | `0` |
+| `VCP_NGINX_SHARED_443` | SNI mux: панель + Reality на TCP 443 | `0` |
+| `VCP_REALITY_BACKEND` | Loopback Reality для mux | `127.0.0.1:10443` |
+| `VCP_REALITY_SNI_LIST` | CSV SNI → Reality | `ya.ru,vk.com,...` |
+| `VCP_PANEL_TLS_CERT` / `KEY` | Cert для panel на `:8443` при shared | LE paths |
 | `VCP_ADMIN_USERNAME` | Первый админ | `admin` |
 
 Секреты: `make secrets` генерирует пустые поля через `openssl rand`.
@@ -176,7 +183,37 @@ make render
 sudo make install-nginx
 ```
 
-Шаблон HTTPS: `deploy/templates/nginx/vpn-panel.ssl.conf.in` (редirect 80→443 + proxy на API).
+Шаблон HTTPS: `deploy/templates/nginx/vpn-panel.ssl.conf.in` (redirect 80→443 + proxy на API).
+
+### Shared TCP 443 (панель + Reality)
+
+Один публичный **TCP 443**: nginx `stream` + `ssl_preread` по SNI.
+
+| SNI | Куда |
+|-----|------|
+| `VCP_PANEL_DOMAIN` | `127.0.0.1:8443` (HTTPS панели) |
+| имена из `VCP_REALITY_SNI_LIST` | `VCP_REALITY_BACKEND` (Reality passthrough) |
+| default | панель |
+
+В `deploy/.env`:
+
+```bash
+VCP_NGINX_SHARED_443=1
+VCP_REALITY_BACKEND=127.0.0.1:10443
+VCP_PANEL_TLS_BACKEND=127.0.0.1:8443
+VCP_REALITY_SNI_LIST=ya.ru,vk.com,gosuslugi.ru,pochta.ru
+VCP_PANEL_TLS_CERT=/etc/letsencrypt/live/panel.example.com/fullchain.pem
+VCP_PANEL_TLS_KEY=/etc/letsencrypt/live/panel.example.com/privkey.pem
+```
+
+Требования:
+
+1. Reality inbound: `listen: 127.0.0.1`, порт = backend (например `10443`) — **не** `0.0.0.0:443`.
+2. В Reality `serverNames` **нет** домена панели; клиентский share `sni=` из dest.
+3. Клиенты Reality ходят на **`:443`** (публичный mux), даже если в live-конфиге inbound port = 10443.
+4. `make render && sudo bash deploy/scripts/install-nginx.sh`
+
+Без нормального LE для панели ветка SNI панели на 443 будет с self-signed (браузер предупредит); Reality-ветка при этом работает.
 
 ---
 
