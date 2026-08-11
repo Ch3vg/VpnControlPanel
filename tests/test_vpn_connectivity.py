@@ -51,6 +51,7 @@ def test_build_xray_reality_client_uses_public_host(panel_settings) -> None:
     assert outbound["settings"]["vnext"][0]["address"] == "vpn.example.com"
     assert outbound["settings"]["vnext"][0]["port"] == 8443
     assert outbound["streamSettings"]["realitySettings"]["publicKey"] == "test-public-key"
+    assert outbound["streamSettings"]["realitySettings"]["serverName"] == "ya.ru"
     assert client["inbounds"][0]["port"] == 19080
 
 
@@ -103,8 +104,9 @@ def test_build_xray_xhttp_client_uses_tls_pin(panel_settings) -> None:
     stream = client["outbounds"][0]["streamSettings"]
     assert stream["security"] == "tls"
     assert stream["tlsSettings"]["serverName"] == "vpn.example.com"
-    assert stream["tlsSettings"]["fingerprint"] == "randomized"
+    assert stream["tlsSettings"]["fingerprint"] == "chrome"
     assert stream["tlsSettings"]["pinnedPeerCertSha256"] == ("AB" * 32)
+    assert stream["xhttpSettings"]["mode"] == "stream-up"
     assert stream["xhttpSettings"]["path"]
 
 

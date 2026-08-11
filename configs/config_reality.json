@@ -25,15 +25,7 @@
           "dest": "ya.ru:443",
           "xver": 0,
           "serverNames": [
-            "",
-            "ya.ru",
-            "gosuslugi.ru",
-            "www.microsoft.com",
-            "vk.com",
-            "kremlin.ru",
-            "pochta.ru",
-            "government.ru",
-            "rzd.ru"
+            "ya.ru"
           ],
           "privateKey": "REPLACE_AT_RUNTIME",
           "shortIds": [
@@ -43,7 +35,7 @@
           ]
         },
         "tcpSettings": {
-          "tcpFastOpen": true
+          "tcpFastOpen": false
         }
       },
       "sniffing": {

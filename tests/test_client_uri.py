@@ -4,8 +4,10 @@ from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.infrastructure.vpn.client_uri import (
     _REALITY_FINGERPRINTS,
     build_share_uris,
+    dest_hostname,
     pick_reality_fingerprint,
     pick_server_name,
+    reality_share_sni,
 )
 from panel.infrastructure.vpn.config_builder import ProfileConfigBuilder
 
@@ -19,6 +21,13 @@ def test_pick_reality_fingerprint_from_pool() -> None:
     assert pick_reality_fingerprint() in _REALITY_FINGERPRINTS
 
 
+def test_dest_hostname_and_reality_share_sni() -> None:
+    assert dest_hostname("ya.ru:443") == "ya.ru"
+    assert dest_hostname("www.microsoft.com:443") == "www.microsoft.com"
+    assert reality_share_sni({"dest": "vk.com:443", "serverNames": ["other.ru"]}) == "vk.com"
+    assert reality_share_sni({"dest": "", "serverNames": ["", "ya.ru"]}) == "ya.ru"
+
+
 def test_reality_share_uri_format(panel_settings) -> None:
     builder = ProfileConfigBuilder(panel_settings)
     result = builder.build(ConfigProfile.XRAY_REALITY, name="ignored")
@@ -30,16 +39,18 @@ def test_reality_share_uri_format(panel_settings) -> None:
         inbound_tag="vless-reality-in",
     )
     uri = uris[0]
+    dest = result.config_data["inbounds"][0]["streamSettings"]["realitySettings"]["dest"]
+    sni = dest_hostname(dest)
     assert uri.startswith("vless://")
     assert "encryption=none" not in uri
     assert "type=tcp" in uri
     assert "security=reality" in uri
     assert "flow=xtls-rprx-vision" in uri
-    assert any(f"fp={fp}" in uri for fp in _REALITY_FINGERPRINTS)
+    assert "fp=chrome" in uri
     assert f"pbk={result.public_key}" in uri
     assert "sid=" in uri
-    assert "sni=" in uri
-    assert "fragment=true" in uri
+    assert f"sni={sni}" in uri
+    assert "fragment=" not in uri
     assert uri.endswith("#Reality-Dynamic")
 
 
@@ -52,6 +63,7 @@ def test_xhttp_share_uri_format(panel_settings) -> None:
     sni = panel_settings.vpn.public_host
     assert inbound["streamSettings"]["security"] == "tls"
     assert inbound["streamSettings"]["tlsSettings"]["serverName"] == sni
+    assert inbound["streamSettings"]["xhttpSettings"]["host"] == sni
     uris = build_share_uris(
         ConfigProfile.XRAY_XHTTP,
         result.config_data,
@@ -63,14 +75,15 @@ def test_xhttp_share_uri_format(panel_settings) -> None:
     uri = uris[0]
     assert "type=xhttp" in uri
     assert "security=tls" in uri
-    assert "host=" in uri
+    assert f"host={sni}" in uri
     assert "path=" in uri
-    assert "mode=packet-up" in uri
+    assert "mode=stream-up" in uri
     assert f"sni={sni}" in uri
     assert "vpn-panel" not in uri
-    assert "fingerprint=randomized" in uri
+    assert "fp=chrome" in uri
     assert "pcs=" in uri
-    assert "insecure=0" in uri
+    assert "insecure=" not in uri
+    assert "allowInsecure" not in uri
     assert uri.endswith("#XHTTP-Dynamic")
 
 
@@ -115,9 +128,9 @@ def test_grpc_share_uri_format(panel_settings) -> None:
     assert "security=tls" in uri
     assert f"sni={sni}" in uri
     assert f"serviceName={service_name}" in uri
-    assert "fingerprint=randomized" in uri
+    assert "fp=chrome" in uri
     assert "pcs=" in uri
-    assert "insecure=0" in uri
+    assert "insecure=" not in uri
     assert "fragment=true" not in uri
     assert uri.endswith("#gRPC-Dynamic")
 

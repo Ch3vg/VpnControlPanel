@@ -10,24 +10,22 @@ def default_vpn_profiles(*, cert_dir: str = "/usr/local/etc/xray/certs") -> dict
             "service_name": "xray",
             "config_filename": "config.json",
             "inbound_tag": "vless-reality-in",
+            # Prefer 443 when free (best anti-TSPU). Do not add while host 443 is occupied.
             "port_candidates": [8443, 2053, 2083, 2096, 9443, 10443, 8444],
             "reality_dest_hosts": [
                 "ya.ru:443",
                 "vk.com:443",
                 "www.microsoft.com:443",
-                "rzd.ru:443",
                 "gosuslugi.ru:443",
                 "pochta.ru:443",
             ],
+            # Unused by builder (SNI = dest hostname). Kept for yaml compatibility.
             "reality_server_names": [
                 "ya.ru",
                 "gosuslugi.ru",
                 "www.microsoft.com",
                 "vk.com",
-                "kremlin.ru",
                 "pochta.ru",
-                "government.ru",
-                "rzd.ru",
             ],
         },
         "xray-grpc": {
@@ -62,10 +60,11 @@ def default_vpn_profiles(*, cert_dir: str = "/usr/local/etc/xray/certs") -> dict
             "service_name": "xray",
             "config_filename": "config.json",
             "inbound_tag": "vless-xhttp-in",
-            "port_candidates": [8080, 8000, 8888, 8081, 8090, 3000, 5000, 9000],
+            # Web-like ports; Host/SNI come from vpn.public_host (not xhttp_hosts).
+            "port_candidates": [8443, 9443, 10443, 8080, 8444, 2083, 2096, 8888],
             "cert_dir": cert_dir,
             "cert_prefix": "xhttp",
-            "xhttp_hosts": ["yandex.ru", "gosuslugi.ru", "kremlin.ru", "rzd.ru"],
+            "xhttp_hosts": [],
             "xhttp_paths": ["/search", "/assets", "/api", "/download", "/news", "/login"],
         },
         "hysteria2": {

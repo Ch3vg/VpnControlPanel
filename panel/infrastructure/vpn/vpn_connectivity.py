@@ -18,7 +18,7 @@ from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.infrastructure.crypto import FieldEncryptor
 from panel.infrastructure.crypto.config_data import decrypt_config_data_fields
 from panel.infrastructure.persistence.repositories.vpn_config import ConfigVersionSnapshot
-from panel.infrastructure.vpn.client_uri import _pin_hex
+from panel.infrastructure.vpn.client_uri import _pin_hex, reality_share_sni
 from panel.infrastructure.vpn.config_builder import ProfileConfigBuilder
 from panel.infrastructure.vpn.service_runtime import is_tcp_port_open
 from panel.infrastructure.vpn.template_loader import find_inbound
@@ -52,12 +52,6 @@ def _pick_free_tcp_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
-
-
-def _first_server_name(names: list[Any]) -> str:
-    from panel.infrastructure.vpn.client_uri import pick_server_name
-
-    return pick_server_name(names)
 
 
 def _find_curl() -> str | None:
@@ -210,11 +204,9 @@ def _build_xray_client_config(
     if snapshot.profile is ConfigProfile.XRAY_REALITY:
         reality = stream["realitySettings"]
         users[0]["flow"] = client.get("flow", "xtls-rprx-vision")
-        from panel.infrastructure.vpn.client_uri import pick_reality_fingerprint
-
         outbound["streamSettings"]["realitySettings"] = {
-            "serverName": _first_server_name(reality.get("serverNames", [])),
-            "fingerprint": pick_reality_fingerprint(),
+            "serverName": reality_share_sni(reality),
+            "fingerprint": "chrome",
             "publicKey": snapshot.public_key,
             "shortId": str(reality["shortIds"][0]),
         }
@@ -241,7 +233,7 @@ def _build_xray_client_config(
         sni = str(tls.get("serverName") or "").strip() or host
         tls_settings: dict[str, Any] = {
             "serverName": sni,
-            "fingerprint": "randomized",
+            "fingerprint": "chrome",
             "alpn": list(tls.get("alpn") or ["h2", "http/1.1"]),
         }
         pin = _pin_hex(snapshot.cert_fingerprint)
@@ -252,7 +244,7 @@ def _build_xray_client_config(
         outbound["streamSettings"]["xhttpSettings"] = {
             "host": xhttp.get("host", host),
             "path": xhttp.get("path", "/"),
-            "mode": xhttp.get("mode", "packet-up"),
+            "mode": xhttp.get("mode", "stream-up"),
         }
     else:
         raise ValueError(f"Unsupported xray profile: {snapshot.profile}")

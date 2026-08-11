@@ -289,13 +289,15 @@ Append-only. События `share.accessed` не пишутся на кажды
 Пример ответа `/share/{token}` (`Content-Type: text/plain`):
 
 ```
-vless://...@host:8444?type=tcp&security=reality&flow=xtls-rprx-vision&fp=chrome&pbk=...&sid=...&sni=...&fragment=true#Reality-Dynamic
-vless://...@host:81?type=xhttp&security=tls&host=...&path=/download&mode=packet-up&fingerprint=randomized&sni=chevg.ignorelist.com&pcs=...&insecure=0#XHTTP-Dynamic
+vless://...@host:8444?type=tcp&security=reality&flow=xtls-rprx-vision&fp=chrome&pbk=...&sid=...&sni=ya.ru#Reality-Dynamic
+vless://...@host:8443?type=xhttp&security=tls&host=chevg.ignorelist.com&path=/download&mode=stream-up&fp=chrome&sni=chevg.ignorelist.com&pcs=...#XHTTP-Dynamic
 hysteria2://...@host:443?sni=chevg.ignorelist.com&obfs=salamander&obfs-password=...&pinSHA256=...&insecure=0#Hysteria2-Dynamic
 ```
 
-Secure-ссылки для самоподписанных TLS (Hysteria2, gRPC) рассчитаны на клиентов с pin (`pinSHA256` / `pcs`).  
+Secure-ссылки для самоподписанных TLS (Hysteria2, gRPC, xHTTP) рассчитаны на клиентов с pin (`pinSHA256` / `pcs`).  
 `insecure=1` удобен для клиентов вроде Hiddify/sing-box; современные **v2rayNG + Xray** `allowInsecure` больше не принимают — нужен secure share с pin.
+
+**Скрытность (Reality / xHTTP):** share SNI Reality = hostname из `dest` (без чужого пула и без пустого SNI). xHTTP: `host` = `sni` = `vpn.public_host` (на бесплатных поддоменах вроде ignorelist.com часто нельзя выпустить LE — self-signed + `pcs`). Mode по умолчанию `stream-up`. Главный выигрыш против ТСПУ для Reality — слушать **:443**, когда порт свободен (в кандидаты не добавляем, пока 443 занят).
 
 ---
 

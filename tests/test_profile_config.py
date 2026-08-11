@@ -23,10 +23,9 @@ def test_xray_reality_template_build(panel_settings) -> None:
     assert len(reality["shortIds"]) == 3
     assert reality["privateKey"]
     assert reality["dest"] in panel_settings.vpn.profiles["xray-reality"].reality_dest_hosts
-    assert reality["serverNames"][0] == ""
-    assert set(reality["serverNames"][1:]) == set(
-        panel_settings.vpn.profiles["xray-reality"].reality_server_names
-    )
+    dest_host = reality["dest"].rsplit(":", 1)[0]
+    assert reality["serverNames"] == [dest_host]
+    assert inbound["streamSettings"]["tcpSettings"]["tcpFastOpen"] is False
     assert result.client_id
     assert result.config_data["routing"]["rules"][-1]["inboundTag"] == ["vless-reality-in"]
 
@@ -62,6 +61,8 @@ def test_xray_xhttp_tls_and_regenerate_keeps_cert(panel_settings) -> None:
     assert stream["security"] == "tls"
     assert stream["tlsSettings"]["serverName"] == sni
     assert stream["tlsSettings"]["alpn"] == ["h2", "http/1.1"]
+    assert stream["xhttpSettings"]["host"] == sni
+    assert stream["xhttpSettings"]["mode"] == "stream-up"
     assert first.cert_fingerprint
     assert first.extra_files["cert"]
     assert first.extra_files["key"]

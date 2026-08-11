@@ -29,6 +29,24 @@ def pick_reality_fingerprint() -> str:
     return random.choice(_REALITY_FINGERPRINTS)
 
 
+def dest_hostname(dest: str) -> str:
+    """Extract host from Reality dest like 'ya.ru:443' (not for IPv6 brackets)."""
+    value = str(dest).strip()
+    if not value:
+        return ""
+    if ":" in value and not value.startswith("["):
+        return value.rsplit(":", 1)[0].strip()
+    return value
+
+
+def reality_share_sni(reality: dict[str, Any]) -> str:
+    """SNI must match dest hostname (anti-DPI); fall back to serverNames."""
+    host = dest_hostname(str(reality.get("dest") or ""))
+    if host:
+        return host
+    return pick_server_name(list(reality.get("serverNames") or []))
+
+
 def _pin_hex(cert_fingerprint: str) -> str:
     return cert_fingerprint.replace(":", "").upper()
 
@@ -102,21 +120,21 @@ def _build_reality_uri(
     reality = inbound["streamSettings"]["realitySettings"]
     short_id = reality["shortIds"][0]
     flow = inbound["settings"]["clients"][0].get("flow", "xtls-rprx-vision")
-    sni = pick_server_name(reality.get("serverNames", []))
-    fp = pick_reality_fingerprint()
+    sni = reality_share_sni(reality)
+    # chrome is the most reliable uTLS profile across v2rayNG / Hiddify;
+    # random safari/firefox/randomized often breaks phone clients.
 
     params = [
         "type=tcp",
         "security=reality",
         f"flow={flow}",
-        f"fp={fp}",
+        "fp=chrome",
         f"pbk={public_key}",
         f"sid={short_id}",
     ]
     if sni:
         params.append(f"sni={quote(sni, safe='')}")
-    if secure:
-        params.append("fragment=true")
+    # Do not set fragment=true: many phone cores hang or fail Reality handshake with it.
     return f"vless://{client_id}@{host}:{port}?{'&'.join(params)}#{quote(label)}"
 
 
@@ -134,7 +152,7 @@ def _build_xhttp_uri(
     tls = inbound["streamSettings"].get("tlsSettings") or {}
     xhost = xhttp.get("host", host)
     path = xhttp.get("path", "/")
-    mode = xhttp.get("mode", "packet-up")
+    mode = xhttp.get("mode", "stream-up")
     sni = tls.get("serverName") or host
     params = [
         "type=xhttp",
@@ -142,14 +160,16 @@ def _build_xhttp_uri(
         f"host={quote(str(xhost), safe='')}",
         f"path={quote(str(path), safe='')}",
         f"mode={quote(str(mode), safe='')}",
-        "fingerprint=randomized",
+        "fp=chrome",
         f"sni={quote(str(sni), safe='')}",
     ]
+    # Dual share:
+    # - secure: pcs only (Xray ≥26.6 removed allowInsecure; v2rayNG needs pin).
+    # - insecure: insecure=1 for Hiddify / older cores; do not mix with pcs.
     if secure:
         pcs = _pin_hex(cert_fingerprint)
         if pcs:
             params.append(f"pcs={pcs}")
-        params.append("insecure=0")
     else:
         params.append("insecure=1")
     return f"vless://{client_id}@{host}:{port}?{'&'.join(params)}#{quote(label)}"
@@ -174,14 +194,13 @@ def _build_grpc_uri(
         "type=grpc",
         "security=tls",
         f"serviceName={quote(str(service_name), safe='')}",
-        "fingerprint=randomized",
+        "fp=chrome",
         f"sni={quote(str(sni), safe='')}",
     ]
     if secure:
         pcs = _pin_hex(cert_fingerprint)
         if pcs:
             params.append(f"pcs={pcs}")
-        params.append("insecure=0")
     else:
         params.append("insecure=1")
     return f"vless://{client_id}@{host}:{port}?{'&'.join(params)}#{quote(label)}"

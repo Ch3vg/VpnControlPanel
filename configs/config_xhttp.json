@@ -20,9 +20,9 @@
         "network": "xhttp",
         "security": "tls",
         "xhttpSettings": {
-          "host": "rzd.ru",
+          "host": "",
           "path": "/download",
-          "mode": "packet-up",
+          "mode": "stream-up",
           "maxUploadSize": 1048576,
           "maxConcurrentUploads": 10,
           "padding": true

@@ -77,8 +77,8 @@ vpn:
       config_filename: config.json
       inbound_tag: vless-reality-in
       port_candidates: [8443, 2053, 2083, 2096, 9443, 10443, 8444]
-      reality_dest_hosts: [ya.ru:443, vk.com:443, www.microsoft.com:443, rzd.ru:443, gosuslugi.ru:443, pochta.ru:443]
-      reality_server_names: [ya.ru, gosuslugi.ru, www.microsoft.com, vk.com, kremlin.ru, pochta.ru, government.ru, rzd.ru]
+      reality_dest_hosts: [ya.ru:443, vk.com:443, www.microsoft.com:443, gosuslugi.ru:443, pochta.ru:443]
+      reality_server_names: [ya.ru, gosuslugi.ru, www.microsoft.com, vk.com, pochta.ru]
       active_config_path: /usr/local/etc/xray/config_reality.json
     xray-grpc:
       template_file: config_grpc.json
@@ -96,10 +96,10 @@ vpn:
       service_name: xray_xhttp
       config_filename: config.json
       inbound_tag: vless-xhttp-in
-      port_candidates: [8080, 8000, 8888, 8081, 8090, 3000, 5000, 9000]
+      port_candidates: [8443, 9443, 10443, 8080, 8444, 2083, 2096, 8888]
       cert_dir: /usr/local/etc/xray/certs
       cert_prefix: xhttp
-      xhttp_hosts: [yandex.ru, gosuslugi.ru, kremlin.ru, rzd.ru]
+      xhttp_hosts: []
       xhttp_paths: [/search, /assets, /api, /download, /news, /login]
       active_config_path: /usr/local/etc/xray/config_xhttp.json
     hysteria2:

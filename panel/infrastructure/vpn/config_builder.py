@@ -15,7 +15,7 @@ from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.infrastructure.filesystem.writer import atomic_write
 from panel.infrastructure.vpn.crypto_utils import cert_has_dns_san, generate_self_signed_cert, to_base64
 from panel.infrastructure.vpn.port_picker import pick_port
-from panel.infrastructure.vpn.client_uri import build_share_uris
+from panel.infrastructure.vpn.client_uri import build_share_uris, dest_hostname
 from panel.infrastructure.vpn.template_loader import find_inbound, load_template, set_client_id
 from panel.infrastructure.vpn.systemd_reload import reload_service
 from panel.infrastructure.vpn.service_ready import wait_for_service_ready
@@ -246,10 +246,10 @@ class ProfileConfigBuilder:
         reality["privateKey"] = private_key
         if profile.reality_dest_hosts:
             reality["dest"] = random.choice(profile.reality_dest_hosts)
-        if profile.reality_server_names:
-            names = [str(name).strip() for name in profile.reality_server_names if str(name).strip()]
-            # Keep empty SNI acceptance used by the stock Reality template.
-            reality["serverNames"] = [""] + names
+        # SNI must equal dest hostname (TSPU flags mismatched SNI/dest pools).
+        dest_host = dest_hostname(str(reality.get("dest") or ""))
+        if dest_host:
+            reality["serverNames"] = [dest_host]
         set_client_id(config, client_id, inbound_tag)
 
         return BuildResult(
@@ -340,12 +340,13 @@ class ProfileConfigBuilder:
         stream = inbound["streamSettings"]
         stream["security"] = "tls"
         xhttp = stream["xhttpSettings"]
-        if profile.xhttp_hosts:
-            xhttp["host"] = random.choice(profile.xhttp_hosts)
+        tls_name = self._tls_server_name()
+        # Host must match TLS SNI (foreign Host + self-signed SNI is a DPI marker).
+        xhttp["host"] = tls_name
+        xhttp["mode"] = "stream-up"
         if profile.xhttp_paths:
             xhttp["path"] = random.choice(profile.xhttp_paths)
 
-        tls_name = self._tls_server_name()
         private_pem, cert_pem, fingerprint = _tls_material(previous, dns_names=[tls_name])
         cert_dir = profile.cert_dir or Path("/usr/local/etc/xray/certs")
         prefix = profile.cert_prefix or "xhttp"
