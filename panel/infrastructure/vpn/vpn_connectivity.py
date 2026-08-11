@@ -61,16 +61,17 @@ def _find_curl() -> str | None:
     return shutil.which("curl")
 
 
-def _probe_connect_hosts(settings: PanelSettings) -> list[str]:
+def _probe_connect_hosts(settings: PanelSettings, *, prefer_host: str | None = None) -> list[str]:
     """Hosts to dial for the probe client.
 
-    Prefer public_host (as end users do), then 127.0.0.1 — UDP/TCP hairpin to the
-    VPS public IP often fails from the same host, especially for Hysteria/QUIC.
+    Prefer profile share host / public_host (as end users do), then 127.0.0.1 — UDP/TCP
+    hairpin to the VPS public IP often fails from the same host, especially for Hysteria/QUIC.
     """
     hosts: list[str] = []
-    public = settings.vpn.public_host.strip()
-    if public:
-        hosts.append(public)
+    for candidate in (prefer_host, settings.vpn.public_host):
+        value = (candidate or "").strip()
+        if value and value not in hosts:
+            hosts.append(value)
     if "127.0.0.1" not in hosts:
         hosts.append("127.0.0.1")
     return hosts
@@ -381,7 +382,9 @@ def _probe_via_hysteria(snapshot: ConfigVersionSnapshot, settings: PanelSettings
     if not binary.is_file():
         return VpnConnectivityProbe(reachable=None, detail="hysteria binary not found")
 
-    hosts = _probe_connect_hosts(settings)
+    hysteria_profile = settings.vpn.profiles.get("hysteria2")
+    prefer = (hysteria_profile.share_public_host if hysteria_profile else None) or None
+    hosts = _probe_connect_hosts(settings, prefer_host=prefer)
     if not hosts:
         return VpnConnectivityProbe(reachable=None, detail="vpn.public_host is empty")
 

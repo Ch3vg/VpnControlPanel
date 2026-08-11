@@ -1,9 +1,9 @@
 # Panel with shared TCP 443 (SNI mux on public :443).
-# :80 stays plain HTTP (no cert, no force-HTTPS).
-# Loopback :8443 is optional HTTPS for SNI=panel domain via the stream mux.
+# :80 stays plain HTTP (no cert, no force-HTTPS) — old + new hostnames.
+# Loopback :8443 is HTTPS for panel SNIs via the stream mux (LE cert).
 server {
     listen 80;
-    server_name ${VCP_PANEL_DOMAIN};
+    server_name ${VCP_PANEL_SERVER_NAMES};
 
     location /.well-known/acme-challenge/ {
         root /var/www/html;
@@ -23,7 +23,7 @@ server {
 
 server {
     listen 127.0.0.1:8443 ssl http2;
-    server_name ${VCP_PANEL_DOMAIN};
+    server_name ${VCP_PANEL_SERVER_NAMES};
 
     ssl_certificate     ${VCP_PANEL_TLS_CERT};
     ssl_certificate_key ${VCP_PANEL_TLS_KEY};

@@ -28,6 +28,33 @@ def test_dest_hostname_and_reality_share_sni() -> None:
     assert reality_share_sni({"dest": "", "serverNames": ["", "ya.ru"]}) == "ya.ru"
 
 
+def test_hysteria_share_uri_uses_share_public_host(panel_settings) -> None:
+    profiles = dict(panel_settings.vpn.profiles)
+    profiles["hysteria2"] = profiles["hysteria2"].model_copy(
+        update={
+            "share_public_host": "hy.example.com",
+            "share_public_port": 443,
+            "port_candidates": [443, 1935],
+        },
+    )
+    settings = panel_settings.model_copy(
+        update={"vpn": panel_settings.vpn.model_copy(update={"profiles": profiles})},
+    )
+    builder = ProfileConfigBuilder(settings)
+    result = builder.build(ConfigProfile.HYSTERIA2, name="Hy")
+    assert result.config_data["tls"]["sni"] == "hy.example.com"
+    assert result.config_data["listen"] == ":443"
+    uris = builder.build_client_uris(
+        ConfigProfile.HYSTERIA2,
+        result.config_data,
+        public_key=result.public_key,
+        cert_fingerprint=result.cert_fingerprint,
+    )
+    assert uris[0].startswith("hysteria2://")
+    assert "@hy.example.com:443?" in uris[0]
+    assert "sni=hy.example.com" in uris[0]
+
+
 def test_reality_share_uri_uses_share_public_port(panel_settings) -> None:
     profiles = dict(panel_settings.vpn.profiles)
     profiles["xray-reality"] = profiles["xray-reality"].model_copy(

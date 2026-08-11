@@ -17,11 +17,17 @@ def _systemctl_action() -> str:
     return action
 
 
-def run_systemctl(action: str, service_name: str | None = None) -> None:
+def run_systemctl(
+    action: str,
+    service_name: str | None = None,
+    *,
+    input_text: str | None = None,
+) -> None:
     cmd = [*_systemctl_command(), action]
     if service_name is not None:
         cmd.append(service_name)
-    subprocess.run(cmd, check=True, timeout=30)
+    payload = None if input_text is None else input_text.encode()
+    subprocess.run(cmd, input=payload, check=True, timeout=30)
 
 
 def reload_service(service_name: str) -> None:

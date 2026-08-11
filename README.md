@@ -101,7 +101,8 @@ VpnControlPanel/
 ├── configs/                      # шаблоны Xray/Hysteria2 (см. configs/README.md)
 ├── deploy/                       # production-деплой (шаблоны, scripts, Makefile)
 ├── docs/
-│   └── DEPLOY.md                 # инструкция по деплою
+│   ├── DEPLOY.md                 # инструкция по деплою
+│   └── ROADMAP.md                # идеи и отложенные улучшения
 ├── panel.yaml.example
 │
 ├── alembic/
@@ -598,7 +599,7 @@ pytest tests/
 ## Статус v1.0.0
 
 Базовый контур (auth, configs, worker, share, audit, metrics, admin UI, production deploy) реализован.  
-Дальнейшие изменения — точечные улучшения и новые протоколы, не «дорожная карта MVP».
+Дальнейшие изменения — точечные улучшения и новые протоколы; см. [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ---
 

@@ -175,6 +175,24 @@ class ProfileConfigBuilder:
             reload_service(profile_settings.service_name)
             wait_for_service_ready(profile_settings.service_name, profile, systemd)
 
+        if profile is ConfigProfile.XRAY_REALITY:
+            from panel.infrastructure.vpn.nginx_shared_443 import sync_reality_shared_443
+
+            sync_reality_shared_443(self._settings, result.config_data)
+        elif profile in {ConfigProfile.XRAY_XHTTP, ConfigProfile.XRAY_GRPC}:
+            from panel.infrastructure.vpn.nginx_shared_443 import sync_reality_shared_443
+
+            # Refresh mux so this profile's share_public_host route stays current.
+            reality_live = None
+            try:
+                from panel.infrastructure.vpn.nginx_shared_443 import _load_live_profile_config
+
+                reality_live = _load_live_profile_config(self._settings, ConfigProfile.XRAY_REALITY.value)
+            except Exception:
+                reality_live = None
+            if reality_live is not None:
+                sync_reality_shared_443(self._settings, reality_live)
+
     def sensitive_fields(self, profile: ConfigProfile) -> list[str]:
         if profile is ConfigProfile.HYSTERIA2:
             return ["auth.password", "obfs.salamander.password"]
@@ -195,10 +213,11 @@ class ProfileConfigBuilder:
         secure: bool = True,
     ) -> list[str]:
         profile_settings = self._settings.vpn.profiles[profile.value]
+        host = (profile_settings.share_public_host or self._settings.vpn.public_host or "").strip()
         return build_share_uris(
             profile,
             config_data,
-            host=self._settings.vpn.public_host,
+            host=host,
             public_key=public_key,
             cert_fingerprint=cert_fingerprint,
             inbound_tag=profile_settings.inbound_tag,
@@ -278,6 +297,8 @@ class ProfileConfigBuilder:
         port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
         inbound = find_inbound(config, inbound_tag)
         inbound["port"] = port
+        if profile.listen_address:
+            inbound["listen"] = profile.listen_address
 
         if previous and previous.client_id:
             client_id = previous.client_id
@@ -288,7 +309,11 @@ class ProfileConfigBuilder:
         tls = inbound["streamSettings"]["tlsSettings"]
         tls["alpn"] = ["h2"]
         tls.pop("fingerprint", None)
-        if profile.grpc_sni_hosts:
+        tls_name = self._tls_server_name(profile)
+        # Own-domain mux (share_public_host): SNI must match the public hostname / LE cert.
+        if (profile.share_public_host or "").strip():
+            tls["serverName"] = tls_name
+        elif profile.grpc_sni_hosts:
             if preferred_grpc_sni and preferred_grpc_sni in profile.grpc_sni_hosts:
                 tls["serverName"] = preferred_grpc_sni
             else:
@@ -301,7 +326,7 @@ class ProfileConfigBuilder:
             else:
                 grpc["serviceName"] = random.choice(profile.grpc_service_names)
 
-        private_pem, cert_pem, fingerprint = _tls_material(previous, dns_names=[self._tls_server_name()])
+        private_pem, cert_pem, fingerprint = _tls_material(previous, dns_names=[tls_name])
         cert_dir = profile.cert_dir or Path("/usr/local/etc/xray/certs")
         prefix = profile.cert_prefix or "grpc"
         cert_file = str(cert_dir / f"{prefix}-cert.pem")
@@ -333,6 +358,8 @@ class ProfileConfigBuilder:
         port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
         inbound = find_inbound(config, inbound_tag)
         inbound["port"] = port
+        if profile.listen_address:
+            inbound["listen"] = profile.listen_address
 
         if previous and previous.client_id:
             client_id = previous.client_id
@@ -343,7 +370,7 @@ class ProfileConfigBuilder:
         stream = inbound["streamSettings"]
         stream["security"] = "tls"
         xhttp = stream["xhttpSettings"]
-        tls_name = self._tls_server_name()
+        tls_name = self._tls_server_name(profile)
         # Host must match TLS SNI (foreign Host + self-signed SNI is a DPI marker).
         xhttp["host"] = tls_name
         xhttp["mode"] = "stream-up"
@@ -386,7 +413,14 @@ class ProfileConfigBuilder:
 
         blocked = set(exclude_ports or ())
         blocked.add(self._settings.server.port)
-        port = pick_port(profile.port_candidates, exclude=blocked, udp=True, preferred=preferred_port)
+        preferred = preferred_port
+        if (
+            preferred is None
+            and profile.share_public_port is not None
+            and profile.share_public_port in profile.port_candidates
+        ):
+            preferred = profile.share_public_port
+        port = pick_port(profile.port_candidates, exclude=blocked, udp=True, preferred=preferred)
         if previous and previous.password:
             password = previous.password
         else:
@@ -397,7 +431,7 @@ class ProfileConfigBuilder:
         else:
             obfs_password = generate_auth_password()
 
-        tls_name = self._tls_server_name()
+        tls_name = self._tls_server_name(profile)
         private_pem, cert_pem, fingerprint = _tls_material(previous, dns_names=[tls_name])
         cert_dir = profile.cert_dir or Path("/usr/local/etc/xray/certs")
         prefix = profile.cert_prefix or "hysteria"
@@ -420,8 +454,15 @@ class ProfileConfigBuilder:
             extra_files={"cert": cert_pem, "key": private_pem},
         )
 
-    def _tls_server_name(self) -> str:
-        """SNI / cert SAN for self-signed profiles — always vpn.public_host, never a fake label."""
+    def _tls_server_name(self, profile: VpnProfileSettings | None = None) -> str:
+        """SNI / cert SAN for self-signed profiles.
+
+        Prefer profile.share_public_host (e.g. Hysteria on hy.example.com), else vpn.public_host.
+        """
+        if profile is not None:
+            override = (profile.share_public_host or "").strip()
+            if override:
+                return override
         return (self._settings.vpn.public_host or "").strip() or "localhost"
 
 

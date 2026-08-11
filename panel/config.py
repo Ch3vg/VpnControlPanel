@@ -143,8 +143,13 @@ class VpnProfileSettings(BaseModel):
     reality_server_names: list[str] = Field(default_factory=list)
     # Advertised in client share URIs when traffic hits a public mux (e.g. nginx :443).
     share_public_port: int | None = Field(default=None, ge=1, le=65535)
+    # Override vpn.public_host in share URIs and TLS SAN/SNI for this profile.
+    share_public_host: str | None = None
     # Force inbound listen address (127.0.0.1 when Reality is behind SNI mux).
     listen_address: str | None = None
+    # When share_public_port + listen_address are set, regenerate rewrites this stream mux.
+    nginx_stream_conf: Path | None = None
+    nginx_panel_backend: str | None = None
 
 
 class VpnServiceSettings(BaseModel):
@@ -154,6 +159,8 @@ class VpnServiceSettings(BaseModel):
 
 class VpnSettings(BaseModel):
     public_host: str = "127.0.0.1"
+    # Extra hostnames that still reach the panel (SNI mux / nginx), while share URIs use public_host.
+    public_host_aliases: list[str] = Field(default_factory=list)
     connectivity_probe_enabled: bool = True
     connectivity_probe_timeout_seconds: float = Field(default=12.0, ge=3, le=60)
     connectivity_probe_cache_seconds: int = Field(default=60, ge=5, le=600)

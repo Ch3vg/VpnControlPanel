@@ -68,6 +68,28 @@ case "${ACTION}" in
       exit 1
     fi
     ;;
+  write-nginx-stream)
+    # Worker syncs Reality backend/SNI map after regenerate (shared TCP 443).
+    # Optional arg: absolute path under /etc/nginx/stream.d/*.conf
+    TARGET="${SERVICE:-${VPN_NGINX_STREAM_CONF:-/etc/nginx/stream.d/vcp-shared-443.conf}}"
+    case "${TARGET}" in
+      /etc/nginx/stream.d/*.conf) ;;
+      *)
+        echo "Refusing nginx stream path outside /etc/nginx/stream.d/*.conf: ${TARGET}" >&2
+        exit 1
+        ;;
+    esac
+    mkdir -p "$(dirname "${TARGET}")"
+    TMP="$(mktemp)"
+    trap 'rm -f "${TMP}"' EXIT
+    cat > "${TMP}"
+    install -m 644 "${TMP}" "${TARGET}"
+    exit 0
+    ;;
+  reload-nginx)
+    /usr/sbin/nginx -t
+    exec /bin/systemctl reload nginx
+    ;;
   *)
     echo "Unsupported action: ${ACTION}" >&2
     exit 1
