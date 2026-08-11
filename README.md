@@ -2,7 +2,7 @@
 
 Веб-панель для администрирования серверных VPN-конфигураций (Xray и Hysteria2).
 
-**v1.0.0** — production-ready: REST API, admin UI (`/admin`), worker, per-config systemd, share-ссылки, connectivity probe, regenerate-all (UI/CLI/cron).
+**v1.1.0** — production-ready + shared TCP 443 (nginx SNI mux), `share_public_host` / panel aliases, auto mux sync on regenerate.
 
 ---
 
@@ -17,12 +17,13 @@
 - **Версионирование конфигов** — share-ссылки привязаны к конкретной версии и не ломаются при regenerate.
 - **Луковая архитектура** — domain → application → infrastructure; HTTP-слои тонкие.
 
-В 1.0.0 также:
+В 1.1.0 также:
 
 - профили `xray-reality`, `xray-xhttp`, `xray-grpc`, `hysteria2`;
-- secure / insecure share (для Hysteria2/gRPC: `pinSHA256` + `insecure=0`, либо `insecure=1`);
-- probe доступности через публичный host (и fallback на localhost);
-- `regenerate-all` из UI, API и `deploy/scripts/regenerate-all-configs.sh` (cron).
+- optional nginx stream SNI mux: панель + Reality (+ xHTTP/gRPC) на публичном TCP 443;
+- `share_public_port` / `share_public_host` / `public_host_aliases` / `listen_address`;
+- auto-rewrite `/etc/nginx/stream.d/vcp-shared-443.conf` после Reality/xHTTP regenerate;
+- secure / insecure share; connectivity probe; `regenerate-all` (UI/API/cron).
 
 ---
 
@@ -596,10 +597,10 @@ pytest tests/
 
 ---
 
-## Статус v1.0.0
+## Статус v1.1.0
 
-Базовый контур (auth, configs, worker, share, audit, metrics, admin UI, production deploy) реализован.  
-Дальнейшие изменения — точечные улучшения и новые протоколы; см. [docs/ROADMAP.md](docs/ROADMAP.md).
+Базовый контур 1.0 + shared-443 mux и per-profile public hosts.  
+Дальнейшие изменения — см. [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ---
 
