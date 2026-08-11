@@ -77,8 +77,8 @@ vpn:
       config_filename: config.json
       inbound_tag: vless-reality-in
       port_candidates: [8443, 2053, 2083, 2096, 9443, 10443, 8444]
-      reality_dest_hosts: [ya.ru:443, vk.com:443, www.microsoft.com:443, gosuslugi.ru:443, pochta.ru:443]
-      reality_server_names: [ya.ru, gosuslugi.ru, www.microsoft.com, vk.com, pochta.ru]
+      reality_dest_hosts: [ya.ru:443, vk.com:443, gosuslugi.ru:443, pochta.ru:443]
+      reality_server_names: [ya.ru, gosuslugi.ru, vk.com, pochta.ru]
     xray-grpc:
       template_file: config_grpc.json
       service_name: xray_grpc

@@ -15,7 +15,6 @@ def default_vpn_profiles(*, cert_dir: str = "/usr/local/etc/xray/certs") -> dict
             "reality_dest_hosts": [
                 "ya.ru:443",
                 "vk.com:443",
-                "www.microsoft.com:443",
                 "gosuslugi.ru:443",
                 "pochta.ru:443",
             ],
@@ -23,7 +22,6 @@ def default_vpn_profiles(*, cert_dir: str = "/usr/local/etc/xray/certs") -> dict
             "reality_server_names": [
                 "ya.ru",
                 "gosuslugi.ru",
-                "www.microsoft.com",
                 "vk.com",
                 "pochta.ru",
             ],
