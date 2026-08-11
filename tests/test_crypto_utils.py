@@ -12,10 +12,10 @@ def test_generate_self_signed_cert_requires_dns_names() -> None:
 
 
 def test_generate_self_signed_cert_includes_san() -> None:
-    _key, cert_pem, fingerprint = generate_self_signed_cert(dns_names=["chevg.ignorelist.com"])
+    _key, cert_pem, fingerprint = generate_self_signed_cert(dns_names=["vpn.example.com"])
     cert = x509.load_pem_x509_certificate(cert_pem.encode("utf-8"))
     san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
-    assert "chevg.ignorelist.com" in san.get_values_for_type(x509.DNSName)
+    assert "vpn.example.com" in san.get_values_for_type(x509.DNSName)
     assert len(fingerprint) == 64
 
 
@@ -51,7 +51,7 @@ def test_cert_has_dns_san_rejects_cn_only() -> None:
     )
     pem = cert.public_bytes(serialization.Encoding.PEM).decode("utf-8")
     assert cert_has_dns_san(pem) is False
-    _k, good_pem, _fp = generate_self_signed_cert(dns_names=["chevg.ignorelist.com"])
+    _k, good_pem, _fp = generate_self_signed_cert(dns_names=["vpn.example.com"])
     assert cert_has_dns_san(good_pem) is True
-    assert cert_has_dns_san(good_pem, required_name="chevg.ignorelist.com") is True
+    assert cert_has_dns_san(good_pem, required_name="vpn.example.com") is True
     assert cert_has_dns_san(good_pem, required_name="other.example") is False

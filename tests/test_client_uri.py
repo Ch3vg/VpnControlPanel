@@ -46,9 +46,7 @@ def test_reality_share_uri_uses_share_public_port(panel_settings) -> None:
         result.config_data,
         public_key=result.public_key,
     )
-    assert f"@chevg.ignorelist.com:443?" in uris[0].replace(settings.vpn.public_host, "chevg.ignorelist.com") or (
-        f"@{settings.vpn.public_host}:443?" in uris[0]
-    )
+    assert f"@{settings.vpn.public_host}:443?" in uris[0]
     assert f":{inbound['port']}?" not in uris[0]
 
 
@@ -58,7 +56,7 @@ def test_reality_share_uri_format(panel_settings) -> None:
     uris = build_share_uris(
         ConfigProfile.XRAY_REALITY,
         result.config_data,
-        host="chevg.ignorelist.com",
+        host="vpn.example.com",
         public_key=result.public_key,
         inbound_tag="vless-reality-in",
     )
@@ -91,7 +89,7 @@ def test_xhttp_share_uri_format(panel_settings) -> None:
     uris = build_share_uris(
         ConfigProfile.XRAY_XHTTP,
         result.config_data,
-        host="chevg.ignorelist.com",
+        host="vpn.example.com",
         public_key="",
         cert_fingerprint=result.cert_fingerprint,
         inbound_tag="vless-xhttp-in",
@@ -117,7 +115,7 @@ def test_xhttp_share_uri_insecure(panel_settings) -> None:
     uris = build_share_uris(
         ConfigProfile.XRAY_XHTTP,
         result.config_data,
-        host="chevg.ignorelist.com",
+        host="vpn.example.com",
         public_key="",
         cert_fingerprint=result.cert_fingerprint,
         inbound_tag="vless-xhttp-in",
@@ -142,7 +140,7 @@ def test_grpc_share_uri_format(panel_settings) -> None:
     uris = build_share_uris(
         ConfigProfile.XRAY_GRPC,
         result.config_data,
-        host="chevg.ignorelist.com",
+        host="vpn.example.com",
         public_key="",
         cert_fingerprint=result.cert_fingerprint,
         inbound_tag="vless-grpc-trusted",
@@ -188,7 +186,7 @@ def test_hysteria2_share_uri_insecure(panel_settings) -> None:
     uris = build_share_uris(
         ConfigProfile.HYSTERIA2,
         result.config_data,
-        host="chevg.ignorelist.com",
+        host="vpn.example.com",
         public_key="",
         cert_fingerprint=result.cert_fingerprint,
         secure=False,
@@ -204,7 +202,7 @@ def test_grpc_share_uri_insecure(panel_settings) -> None:
     uris = build_share_uris(
         ConfigProfile.XRAY_GRPC,
         result.config_data,
-        host="chevg.ignorelist.com",
+        host="vpn.example.com",
         public_key="",
         cert_fingerprint=result.cert_fingerprint,
         inbound_tag="vless-grpc-trusted",
@@ -223,7 +221,7 @@ def test_hysteria2_share_uri_format(panel_settings) -> None:
     uris = build_share_uris(
         ConfigProfile.HYSTERIA2,
         result.config_data,
-        host="chevg.ignorelist.com",
+        host="vpn.example.com",
         public_key="",
         cert_fingerprint=result.cert_fingerprint,
     )

@@ -23,4 +23,4 @@
 
 Перед production настройте шаблоны под свой сервер: routing, `reality_dest_hosts` (только хосты, **достижимые с VPS**), пути к сертификатам, порт SOCKS-петли в `client-in-loop` (если не 51820). Reality на non-443 легче замечает ТСПУ — по возможности слушайте `:443`.
 
-Самоподписанные сертификаты (gRPC / xHTTP / Hysteria2) выпускаются с DNS SAN = `vpn.public_host` (например `chevg.ignorelist.com`) и хранятся per-config рядом с live-конфигом. У xHTTP HTTP Host совпадает с этим SNI (чужой Host + self-signed SNI — маркер DPI). gRPC по-прежнему может брать SNI из `grpc_sni_hosts`. Secure share отдаёт fingerprint (`pinSHA256` / `pcs`) для клиентов без `insecure`.
+Самоподписанные сертификаты (gRPC / xHTTP / Hysteria2) выпускаются с DNS SAN = `vpn.public_host` (например `vpn.example.com`) и хранятся per-config рядом с live-конфигом. У xHTTP HTTP Host совпадает с этим SNI (чужой Host + self-signed SNI — маркер DPI). gRPC по-прежнему может брать SNI из `grpc_sni_hosts`. Secure share отдаёт fingerprint (`pinSHA256` / `pcs`) для клиентов без `insecure`.
