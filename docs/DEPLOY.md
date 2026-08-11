@@ -210,7 +210,7 @@ VCP_PANEL_TLS_KEY=/etc/letsencrypt/live/panel.example.com/privkey.pem
 
 1. Reality inbound: `listen: 127.0.0.1`, порт = backend (например `10443`) — **не** `0.0.0.0:443`.
 2. В Reality `serverNames` **нет** домена панели; клиентский share `sni=` из dest.
-3. Клиенты Reality ходят на **`:443`** (публичный mux), даже если в live-конфиге inbound port = 10443.
+3. Клиенты Reality ходят на **`:443`** (публичный mux). В `panel.yaml` у профиля `xray-reality` задайте `share_public_port: 443` и `listen_address: "127.0.0.1"`, чтобы share URI и regenerate это учитывали.
 4. Пакет `libnginx-mod-stream` (Ubuntu/Debian). Затем `make render && sudo bash deploy/scripts/install-nginx.sh`
 
 Без нормального LE для панели ветка HTTPS на 443 (SNI панели) будет с self-signed (браузер предупредит); **HTTP :80 остаётся без редиректа и без сертификата**. Reality-ветка на 443 при этом работает.

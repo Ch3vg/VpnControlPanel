@@ -79,6 +79,9 @@ vpn:
       port_candidates: [8443, 2053, 2083, 2096, 9443, 10443, 8444]
       reality_dest_hosts: [ya.ru:443, vk.com:443, gosuslugi.ru:443, pochta.ru:443]
       reality_server_names: [ya.ru, gosuslugi.ru, vk.com, pochta.ru]
+      # When nginx SNI mux owns public :443, advertise 443 in share URIs and bind Reality on loopback.
+      # share_public_port: 443
+      # listen_address: "127.0.0.1"
       active_config_path: /usr/local/etc/xray/config_reality.json
     xray-grpc:
       template_file: config_grpc.json

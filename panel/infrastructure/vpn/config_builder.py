@@ -203,6 +203,7 @@ class ProfileConfigBuilder:
             cert_fingerprint=cert_fingerprint,
             inbound_tag=profile_settings.inbound_tag,
             secure=secure,
+            public_port=profile_settings.share_public_port,
         )
 
     def _resolve_template_path(self, template_file: str) -> Path:
@@ -228,6 +229,8 @@ class ProfileConfigBuilder:
         port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
         inbound = find_inbound(config, inbound_tag)
         inbound["port"] = port
+        if profile.listen_address:
+            inbound["listen"] = profile.listen_address
 
         if previous and previous.client_id and previous.private_key and previous.public_key:
             client_id = previous.client_id

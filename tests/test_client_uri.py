@@ -28,6 +28,30 @@ def test_dest_hostname_and_reality_share_sni() -> None:
     assert reality_share_sni({"dest": "", "serverNames": ["", "ya.ru"]}) == "ya.ru"
 
 
+def test_reality_share_uri_uses_share_public_port(panel_settings) -> None:
+    profiles = dict(panel_settings.vpn.profiles)
+    profiles["xray-reality"] = profiles["xray-reality"].model_copy(
+        update={"share_public_port": 443, "listen_address": "127.0.0.1"},
+    )
+    settings = panel_settings.model_copy(
+        update={"vpn": panel_settings.vpn.model_copy(update={"profiles": profiles})},
+    )
+    builder = ProfileConfigBuilder(settings)
+    result = builder.build(ConfigProfile.XRAY_REALITY, name="ignored")
+    inbound = result.config_data["inbounds"][0]
+    assert inbound["listen"] == "127.0.0.1"
+    assert inbound["port"] != 443
+    uris = builder.build_client_uris(
+        ConfigProfile.XRAY_REALITY,
+        result.config_data,
+        public_key=result.public_key,
+    )
+    assert f"@chevg.ignorelist.com:443?" in uris[0].replace(settings.vpn.public_host, "chevg.ignorelist.com") or (
+        f"@{settings.vpn.public_host}:443?" in uris[0]
+    )
+    assert f":{inbound['port']}?" not in uris[0]
+
+
 def test_reality_share_uri_format(panel_settings) -> None:
     builder = ProfileConfigBuilder(panel_settings)
     result = builder.build(ConfigProfile.XRAY_REALITY, name="ignored")

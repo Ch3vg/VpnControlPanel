@@ -141,6 +141,10 @@ class VpnProfileSettings(BaseModel):
     grpc_service_names: list[str] = Field(default_factory=list)
     reality_dest_hosts: list[str] = Field(default_factory=list)
     reality_server_names: list[str] = Field(default_factory=list)
+    # Advertised in client share URIs when traffic hits a public mux (e.g. nginx :443).
+    share_public_port: int | None = Field(default=None, ge=1, le=65535)
+    # Force inbound listen address (127.0.0.1 when Reality is behind SNI mux).
+    listen_address: str | None = None
 
 
 class VpnServiceSettings(BaseModel):

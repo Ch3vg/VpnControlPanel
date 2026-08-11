@@ -60,6 +60,7 @@ def build_share_uris(
     cert_fingerprint: str = "",
     inbound_tag: str = "",
     secure: bool = True,
+    public_port: int | None = None,
 ) -> list[str]:
     label = _SHARE_LABELS.get(profile, profile.value)
 
@@ -71,11 +72,12 @@ def build_share_uris(
                 cert_fingerprint=cert_fingerprint,
                 label=label,
                 secure=secure,
+                public_port=public_port,
             ),
         ]
 
     inbound = find_inbound(config_data, inbound_tag)
-    port = int(inbound["port"])
+    port = int(public_port) if public_port else int(inbound["port"])
     client_id = inbound["settings"]["clients"][0]["id"]
 
     if profile is ConfigProfile.XRAY_REALITY:
@@ -213,8 +215,9 @@ def _build_hysteria2_uri(
     cert_fingerprint: str,
     label: str,
     secure: bool,
+    public_port: int | None = None,
 ) -> str:
-    port = int(str(config_data["listen"]).lstrip(":"))
+    port = int(public_port) if public_port else int(str(config_data["listen"]).lstrip(":"))
     password = config_data["auth"]["password"]
     sni = config_data.get("sni") or config_data.get("tls", {}).get("sni") or host
     params = [f"sni={quote(str(sni), safe='')}"]
