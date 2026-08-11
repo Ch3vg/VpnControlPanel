@@ -1,5 +1,6 @@
-# Panel HTTPS on loopback — used with VCP_NGINX_SHARED_443=1 (public :443 is nginx stream).
-# Certs: Let's Encrypt paths, or self-signed / custom via VCP_PANEL_TLS_CERT / VCP_PANEL_TLS_KEY.
+# Panel with shared TCP 443 (SNI mux on public :443).
+# :80 stays plain HTTP (no cert, no force-HTTPS).
+# Loopback :8443 is optional HTTPS for SNI=panel domain via the stream mux.
 server {
     listen 80;
     server_name ${VCP_PANEL_DOMAIN};
@@ -8,8 +9,15 @@ server {
         root /var/www/html;
     }
 
+    client_max_body_size 1m;
+
     location / {
-        return 301 https://$host$request_uri;
+        proxy_pass http://${VCP_API_HOST}:${VCP_API_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 
