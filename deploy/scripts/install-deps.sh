@@ -12,6 +12,7 @@ apt-get install -y \
   python3-pip \
   postgresql \
   nginx \
+  libnginx-mod-stream \
   git \
   openssl \
   gettext-base \

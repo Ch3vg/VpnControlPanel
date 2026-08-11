@@ -211,7 +211,7 @@ VCP_PANEL_TLS_KEY=/etc/letsencrypt/live/panel.example.com/privkey.pem
 1. Reality inbound: `listen: 127.0.0.1`, порт = backend (например `10443`) — **не** `0.0.0.0:443`.
 2. В Reality `serverNames` **нет** домена панели; клиентский share `sni=` из dest.
 3. Клиенты Reality ходят на **`:443`** (публичный mux), даже если в live-конфиге inbound port = 10443.
-4. `make render && sudo bash deploy/scripts/install-nginx.sh`
+4. Пакет `libnginx-mod-stream` (Ubuntu/Debian). Затем `make render && sudo bash deploy/scripts/install-nginx.sh`
 
 Без нормального LE для панели ветка SNI панели на 443 будет с self-signed (браузер предупредит); Reality-ветка при этом работает.
 
