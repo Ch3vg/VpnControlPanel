@@ -80,6 +80,8 @@ vpn:
       reality_dest_hosts: [ya.ru:443, vk.com:443, gosuslugi.ru:443, pochta.ru:443]
       reality_server_names: [ya.ru, gosuslugi.ru, vk.com, pochta.ru]
       # When nginx SNI mux owns public :443, advertise 443 in share URIs and bind Reality on loopback.
+      # share_public_host is the dial address in vless:// only — Reality sni= stays dest (ya.ru, …).
+      # share_public_host: auth.example.com
       # share_public_port: 443
       # listen_address: "127.0.0.1"
       active_config_path: /usr/local/etc/xray/config_reality.json

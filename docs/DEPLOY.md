@@ -209,12 +209,12 @@ VCP_PANEL_TLS_KEY=/etc/letsencrypt/live/panel.example.com/privkey.pem
 Требования:
 
 1. Reality inbound: `listen: 127.0.0.1`, порт = backend (например `10443`) — **не** `0.0.0.0:443`.
-2. В Reality `serverNames` **нет** домена панели; клиентский share `sni=` из dest.
-3. Клиенты Reality ходят на **`:443`** (публичный mux). В `panel.yaml` у профиля `xray-reality` задайте `share_public_port: 443` и `listen_address: "127.0.0.1"`, чтобы share URI и regenerate это учитывали.
+2. В Reality `serverNames` **нет** домена панели; клиентский share `sni=` из dest (маскировка), **не** из `share_public_host`.
+3. Клиенты Reality ходят на **`:443`** (публичный mux). В `panel.yaml` у профиля `xray-reality` задайте `share_public_port: 443` и `listen_address: "127.0.0.1"`. Опционально `share_public_host: auth.example.com` — только адрес в `vless://…@host:443` (удобный DNS); SNI по-прежнему dest (`ya.ru` и т.п.). Не путать с HTTP `sites-available`: Reality нельзя маршрутизировать по `server_name` своего домена — нужен stream mux по SNI dest.
 4. Hysteria2 — **UDP** (не TCP mux). Отдельный hostname через `share_public_host` (например `hy.example.com`) и `port_candidates` с `443` для UDP/443 рядом с TCP/443 nginx.
 5. Пакет `libnginx-mod-stream` (Ubuntu/Debian). Затем `make render && sudo bash deploy/scripts/install-nginx.sh`
 
-После **create/regenerate** Reality worker сам переписывает `/etc/nginx/stream.d/vcp-shared-443.conf` (backend = текущий `listen:port`, SNI = dest/hostnames из профиля) и делает `nginx -t && reload` через `vpn-systemctl`. Ручной sync не нужен, пока в профиле заданы `share_public_port` + `listen_address`.
+После **create/regenerate** Reality worker сам переписывает `/etc/nginx/stream.d/vcp-shared-443.conf` (backend = текущий `listen:port`, SNI = dest/hostnames из профиля) и делает `nginx -t && reload` через `vpn-systemctl`. Ручной sync не нужен, пока в профиле заданы `share_public_port` + `listen_address`. Смена только `share_public_host` достаточно reload `vpn-api` — share URI собирается из профиля при выдаче, regenerate не обязателен.
 
 Опционально в профиле: `share_public_host` (override `vpn.public_host` в share/TLS), `nginx_stream_conf`, `nginx_panel_backend` (по умолчанию `127.0.0.1:8443`).
 

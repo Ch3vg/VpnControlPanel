@@ -77,6 +77,31 @@ def test_reality_share_uri_uses_share_public_port(panel_settings) -> None:
     assert f":{inbound['port']}?" not in uris[0]
 
 
+def test_reality_share_uri_uses_share_public_host(panel_settings) -> None:
+    profiles = dict(panel_settings.vpn.profiles)
+    profiles["xray-reality"] = profiles["xray-reality"].model_copy(
+        update={
+            "share_public_host": "auth.example.com",
+            "share_public_port": 443,
+            "listen_address": "127.0.0.1",
+        },
+    )
+    settings = panel_settings.model_copy(
+        update={"vpn": panel_settings.vpn.model_copy(update={"profiles": profiles})},
+    )
+    builder = ProfileConfigBuilder(settings)
+    result = builder.build(ConfigProfile.XRAY_REALITY, name="ignored")
+    dest = result.config_data["inbounds"][0]["streamSettings"]["realitySettings"]["dest"]
+    uris = builder.build_client_uris(
+        ConfigProfile.XRAY_REALITY,
+        result.config_data,
+        public_key=result.public_key,
+    )
+    assert "@auth.example.com:443?" in uris[0]
+    assert f"sni={dest.split(':')[0]}" in uris[0] or "sni=" in uris[0]
+    assert "sni=auth.example.com" not in uris[0]
+
+
 def test_reality_share_uri_format(panel_settings) -> None:
     builder = ProfileConfigBuilder(panel_settings)
     result = builder.build(ConfigProfile.XRAY_REALITY, name="ignored")
