@@ -25,6 +25,14 @@ def setup_web_ui(app: FastAPI, settings: PanelSettings) -> None:
         name="web-static",
     )
 
+    favicon_ico = static_dir / "favicon.ico"
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> FileResponse:
+        if not favicon_ico.is_file():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        return FileResponse(favicon_ico, media_type="image/x-icon")
+
     @app.get(prefix, include_in_schema=False)
     @app.get(f"{prefix}/{{full_path:path}}", include_in_schema=False)
     async def admin_ui(full_path: str = "") -> FileResponse:
