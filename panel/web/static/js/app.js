@@ -161,8 +161,8 @@ function readPolicyChecks(container) {
 }
 
 const STATUS_LABELS = {
-  pending: "Ожидание",
-  processing: "Обработка",
+  pending: "В очереди",
+  processing: "Сборка",
   active: "Активен",
   failed: "Ошибка",
   offline: "Недоступен",
@@ -1242,28 +1242,25 @@ function renderConfigDetailContent(config, status) {
     </section>
 
     <section class="card" id="config-logs-card">
-      <div class="toolbar">
+      <div class="toolbar config-logs-toolbar">
         <h2 class="card-title" style="margin:0">Логи сервиса</h2>
-        <div class="btn-row">
-          <label class="policy-check" style="margin:0">
+        <div class="config-logs-controls">
+          <label class="config-logs-auto" for="config-logs-auto">
             <input type="checkbox" id="config-logs-auto" checked>
-            <span>Автообновление</span>
+            <span>Авто</span>
           </label>
-          <label class="field" style="margin:0;display:flex;align-items:center;gap:0.4rem">
-            <span class="muted" style="white-space:nowrap">Интервал</span>
-            <select id="config-logs-interval" style="width:auto;min-width:7rem">
-              <option value="2000">2 с</option>
-              <option value="5000" selected>5 с</option>
-              <option value="10000">10 с</option>
-              <option value="30000">30 с</option>
-              <option value="custom">Свой (мс)</option>
-            </select>
-            <input id="config-logs-interval-ms" type="number" min="500" max="600000" step="100" value="5000" class="hidden" style="width:7rem" title="Интервал в миллисекундах" aria-label="Интервал в миллисекундах">
-          </label>
+          <select id="config-logs-interval" class="config-logs-interval" title="Интервал автообновления" aria-label="Интервал автообновления">
+            <option value="2000">2 с</option>
+            <option value="5000" selected>5 с</option>
+            <option value="10000">10 с</option>
+            <option value="30000">30 с</option>
+            <option value="custom">Свой…</option>
+          </select>
+          <input id="config-logs-interval-ms" type="number" min="500" max="600000" step="100" value="5000" class="config-logs-interval-ms hidden" title="Интервал, мс" aria-label="Интервал в миллисекундах" placeholder="мс">
           <button type="button" class="secondary" id="config-logs-refresh">Обновить</button>
         </div>
       </div>
-      <div id="config-logs-meta" class="muted" style="margin-top:0.5rem"></div>
+      <div id="config-logs-meta" class="muted config-logs-meta"></div>
       <pre id="config-logs-pre" class="config-logs-pre">Загрузка…</pre>
     </section>
 
@@ -1463,10 +1460,13 @@ function bindConfigLogs(configId) {
       pre.textContent = result.content || "";
       if (atBottom) pre.scrollTop = pre.scrollHeight;
       if (meta) {
-        const unit = result.service_name ? `unit ${result.service_name}` : "unit неизвестен";
-        const state = result.available ? "ok" : "ошибка чтения";
-        const interval = currentIntervalMs();
-        meta.textContent = `${unit} · последние ${result.lines} строк · ${state} · poll ${interval} мс`;
+        const state = result.available ? "ок" : "ошибка чтения";
+        const ms = currentIntervalMs();
+        const intervalLabel = ms % 1000 === 0 ? `${ms / 1000} с` : `${ms} мс`;
+        meta.textContent = `последние ${result.lines} строк · ${state} · каждые ${intervalLabel}`;
+        if (result.service_name) {
+          meta.title = result.service_name;
+        }
       }
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
