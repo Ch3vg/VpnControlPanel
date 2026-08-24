@@ -61,20 +61,63 @@ def _find_curl() -> str | None:
     return shutil.which("curl")
 
 
-def _probe_connect_hosts(settings: PanelSettings, *, prefer_host: str | None = None) -> list[str]:
+def _probe_connect_hosts(
+    settings: PanelSettings,
+    *,
+    prefer_host: str | None = None,
+    allow_loopback: bool = True,
+) -> list[str]:
     """Hosts to dial for the probe client.
 
-    Prefer profile share host / public_host (as end users do), then 127.0.0.1 — UDP/TCP
-    hairpin to the VPS public IP often fails from the same host, especially for Hysteria/QUIC.
+    Prefer per-config / profile share host (as end users do), then vpn.public_host.
+    Loopback is only a last resort when allow_loopback=True (legacy non-mux).
+    For mux profiles (share_public_port set) loopback must stay off — otherwise the
+    probe bypasses DNS/nginx and reports false "online".
     """
     hosts: list[str] = []
     for candidate in (prefer_host, settings.vpn.public_host):
         value = (candidate or "").strip()
         if value and value not in hosts:
             hosts.append(value)
-    if "127.0.0.1" not in hosts:
+    if allow_loopback and "127.0.0.1" not in hosts:
         hosts.append("127.0.0.1")
     return hosts
+
+
+def _probe_dial_port(
+    snapshot: ConfigVersionSnapshot,
+    host: str,
+    settings: PanelSettings,
+) -> int:
+    """Public dial port for hostname; internal inbound port only for loopback."""
+    if host.strip() in {"127.0.0.1", "::1", "localhost"}:
+        return int(snapshot.port)
+    profile = settings.vpn.profiles.get(snapshot.profile.value)
+    if profile is not None and profile.share_public_port is not None:
+        return int(profile.share_public_port)
+    return int(snapshot.port)
+
+
+def _probe_prefer_host(snapshot: ConfigVersionSnapshot, settings: PanelSettings) -> str | None:
+    if (snapshot.share_public_host or "").strip():
+        return snapshot.share_public_host.strip()
+    profile = settings.vpn.profiles.get(snapshot.profile.value)
+    if profile is not None and (profile.share_public_host or "").strip():
+        return profile.share_public_host.strip()
+    return None
+
+
+def _probe_allow_loopback(snapshot: ConfigVersionSnapshot, settings: PanelSettings) -> bool:
+    """Disable loopback fallback when traffic is expected via public mux :443."""
+    profile = settings.vpn.profiles.get(snapshot.profile.value)
+    if profile is None:
+        return True
+    if profile.share_public_port:
+        return False
+    if (snapshot.share_public_host or profile.share_public_host or "").strip():
+        # Explicit public hostname without mux still should not fake via loopback.
+        return False
+    return True
 
 
 def _wait_for_port(port: int, *, timeout: float, proc: subprocess.Popen[Any] | None = None) -> bool:
@@ -185,7 +228,7 @@ def _build_xray_client_config(
             "vnext": [
                 {
                     "address": host,
-                    "port": snapshot.port,
+                    "port": _probe_dial_port(snapshot, host, settings),
                     "users": [
                         {
                             "id": client_id,
@@ -287,7 +330,7 @@ def _build_hysteria_client_config(
     if pin:
         tls["pinSHA256"] = pin
     client: dict[str, Any] = {
-        "server": f"{host}:{snapshot.port}",
+        "server": f"{host}:{_probe_dial_port(snapshot, host, settings)}",
         "auth": password,
         "tls": tls,
         "socks5": {"listen": f"127.0.0.1:{socks_port}"},
@@ -350,9 +393,14 @@ def _probe_via_xray(snapshot: ConfigVersionSnapshot, settings: PanelSettings) ->
     if not binary.is_file():
         return VpnConnectivityProbe(reachable=None, detail="xray binary not found")
 
-    hosts = _probe_connect_hosts(settings)
+    prefer = _probe_prefer_host(snapshot, settings)
+    hosts = _probe_connect_hosts(
+        settings,
+        prefer_host=prefer,
+        allow_loopback=_probe_allow_loopback(snapshot, settings),
+    )
     if not hosts:
-        return VpnConnectivityProbe(reachable=None, detail="vpn.public_host is empty")
+        return VpnConnectivityProbe(reachable=None, detail="no probe host (set share_public_host or vpn.public_host)")
 
     timeout = settings.vpn.connectivity_probe_timeout_seconds
     last = VpnConnectivityProbe(reachable=False, detail="connectivity probe failed")
@@ -382,11 +430,14 @@ def _probe_via_hysteria(snapshot: ConfigVersionSnapshot, settings: PanelSettings
     if not binary.is_file():
         return VpnConnectivityProbe(reachable=None, detail="hysteria binary not found")
 
-    hysteria_profile = settings.vpn.profiles.get("hysteria2")
-    prefer = (hysteria_profile.share_public_host if hysteria_profile else None) or None
-    hosts = _probe_connect_hosts(settings, prefer_host=prefer)
+    prefer = _probe_prefer_host(snapshot, settings)
+    hosts = _probe_connect_hosts(
+        settings,
+        prefer_host=prefer,
+        allow_loopback=_probe_allow_loopback(snapshot, settings),
+    )
     if not hosts:
-        return VpnConnectivityProbe(reachable=None, detail="vpn.public_host is empty")
+        return VpnConnectivityProbe(reachable=None, detail="no probe host (set share_public_host or vpn.public_host)")
 
     cert_pem = (snapshot.public_key or "").strip()
     if not cert_pem:

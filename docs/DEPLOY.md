@@ -231,6 +231,8 @@ tls_key_file: /etc/letsencrypt/live/example.com/privkey.pem
 
 При **создании** конфига можно указать свой `share_public_host` (поддомен): он хранится в БД, используется в share URI и как TLS/SNI для xHTTP/gRPC/Hysteria; для Reality — только dial-адрес (`@host`), `sni=` остаётся dest. Mux пересобирает маршруты по **всем** live xHTTP/gRPC конфигам (разные host → разные backend).
 
+Connectivity probe для mux-профилей (`share_public_port`) ходит на **публичный host:443** (как клиент), без fallback на `127.0.0.1:internal` — иначе проверка «зелёная» при несуществующем DNS.
+
 ### Regenerate policy при создании
 
 `POST /api/v1/configs` принимает опциональное `regenerate_policy` (флаги `rotate_port`, `rotate_client_id`, `rotate_reality_keys`, `rotate_short_ids`, `rotate_dest`, `rotate_path`, `rotate_service_name`, `rotate_tls`, `rotate_auth`, `rotate_obfs`). В админке — чекбоксы «При regenerate ротировать». Старые конфиги с `NULL` в БД используют дефолты `RegeneratePolicy.for_profile`.

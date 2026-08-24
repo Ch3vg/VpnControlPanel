@@ -49,10 +49,57 @@ def test_build_xray_reality_client_uses_public_host(panel_settings) -> None:
     )
     outbound = client["outbounds"][0]
     assert outbound["settings"]["vnext"][0]["address"] == "vpn.example.com"
+    # No share_public_port in default test profiles → internal inbound port.
     assert outbound["settings"]["vnext"][0]["port"] == 8443
     assert outbound["streamSettings"]["realitySettings"]["publicKey"] == "test-public-key"
     assert outbound["streamSettings"]["realitySettings"]["serverName"] == "ya.ru"
     assert client["inbounds"][0]["port"] == 19080
+
+
+def test_probe_dial_port_uses_share_public_port_for_hostname(panel_settings) -> None:
+    from panel.infrastructure.vpn.vpn_connectivity import _probe_allow_loopback, _probe_connect_hosts, _probe_dial_port
+
+    profiles = dict(panel_settings.vpn.profiles)
+    profiles["xray-xhttp"] = profiles["xray-xhttp"].model_copy(
+        update={"share_public_port": 443, "listen_address": "127.0.0.1", "share_public_host": "learn.example.com"},
+    )
+    settings = panel_settings.model_copy(
+        update={"vpn": panel_settings.vpn.model_copy(update={"profiles": profiles})},
+    )
+    template_path = panel_settings.paths.templates / "config_xhttp.json"
+    config_data = json.loads(template_path.read_text(encoding="utf-8"))
+    snapshot = ConfigVersionSnapshot(
+        config_id=uuid.uuid4(),
+        protocol=VpnProtocolType.XRAY,
+        profile=ConfigProfile.XRAY_XHTTP,
+        name="xhttp",
+        version=1,
+        port=8444,
+        public_key="",
+        cert_fingerprint="ab" * 32,
+        config_data=config_data,
+        share_public_host="foo.example.com",
+    )
+    assert _probe_dial_port(snapshot, "foo.example.com", settings) == 443
+    assert _probe_dial_port(snapshot, "127.0.0.1", settings) == 8444
+    assert _probe_allow_loopback(snapshot, settings) is False
+    hosts = _probe_connect_hosts(
+        settings,
+        prefer_host="foo.example.com",
+        allow_loopback=_probe_allow_loopback(snapshot, settings),
+    )
+    assert hosts[0] == "foo.example.com"
+    # Loopback fallback disabled; 127.0.0.1 may still appear only if it is vpn.public_host.
+    if settings.vpn.public_host != "127.0.0.1":
+        assert "127.0.0.1" not in hosts
+
+    client = _build_xray_client_config(
+        snapshot,
+        host="foo.example.com",
+        socks_port=19080,
+        settings=settings,
+    )
+    assert client["outbounds"][0]["settings"]["vnext"][0]["port"] == 443
 
 
 def test_build_xray_grpc_client_uses_pinned_peer_cert_sha256(panel_settings) -> None:
