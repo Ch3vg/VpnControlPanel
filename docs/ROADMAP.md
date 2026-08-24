@@ -8,6 +8,10 @@
 
 При создании VPN-конфига задаётся `regenerate_policy` (БД + UI create): какие параметры ротируются на последующих regenerate. Builder/worker читают policy; для TLS-профилей стабильный LE через `tls_cert_file` / `tls_key_file` в профиле.
 
+### Редактор шаблонов профилей
+
+В UI (Обзор → Шаблоны) и API `GET/PUT /api/v1/templates` можно править файлы шаблонов (`configs/config_*.json`, `hysteria.server.yaml`). Изменения влияют на новые create/regenerate, не на уже развёрнутые конфиги до regenerate.
+
 ## Идеи (бэклог)
 
 - Массовый PATCH `regenerate_policy` у уже созданных конфигов

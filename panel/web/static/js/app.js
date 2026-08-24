@@ -348,6 +348,11 @@ function navigate(path) {
     renderLogin();
     return;
   }
+  if (path === "/templates") {
+    history.pushState(null, "", "#/templates");
+    renderTemplates();
+    return;
+  }
   if (path === "/configs") {
     history.pushState(null, "", "#/configs");
     renderConfigs();
@@ -366,6 +371,7 @@ function navigate(path) {
 function parseRoute() {
   const hash = location.hash.replace(/^#/, "") || "/configs";
   if (hash === "/login") return "/login";
+  if (hash === "/templates") return "/templates";
   if (hash === "/configs" || hash === "/") return "/configs";
   const match = hash.match(/^\/configs\/([0-9a-f-]+)$/i);
   if (match) return `/configs/${match[1]}`;
@@ -594,6 +600,7 @@ async function renderConfigs() {
 
   appEl.innerHTML = `
     ${layoutHeader("Обзор", `
+      <button type="button" class="secondary" id="templates-btn">Шаблоны</button>
       <button type="button" class="secondary" id="logout-btn">Выйти</button>
       <button type="button" id="create-btn">Создать конфиг</button>
     `)}
@@ -646,6 +653,7 @@ async function renderConfigs() {
     api.clearToken();
     navigate("/login");
   });
+  document.getElementById("templates-btn")?.addEventListener("click", () => navigate("/templates"));
   document.getElementById("create-btn").addEventListener("click", openCreateDialog);
   document.getElementById("protocol-filter").addEventListener("change", loadConfigsList);
   document.getElementById("regenerate-all-btn")?.addEventListener("click", handleRegenerateAll);
@@ -664,6 +672,208 @@ async function renderConfigs() {
   await Promise.all([loadSystemResources(), loadConfigsList(), loadShareLinksList("share-links-body")]);
   startResourcesPolling();
   startRuntimePolling();
+}
+
+async function renderTemplates() {
+  if (!requireAuth()) return;
+
+  appEl.innerHTML = `
+    ${layoutHeader("Шаблоны", `
+      <button type="button" class="secondary" id="back-btn">← К обзору</button>
+      <button type="button" class="secondary" id="logout-btn">Выйти</button>
+    `)}
+    <section class="card">
+      <div class="toolbar">
+        <h2 class="card-title" style="margin:0">Шаблоны профилей</h2>
+        <button type="button" class="secondary" id="templates-refresh">Обновить</button>
+      </div>
+      <div id="templates-body" class="muted">Загрузка…</div>
+    </section>
+    <section class="card hidden" id="template-editor-card">
+      <div class="toolbar">
+        <h2 class="card-title" style="margin:0" id="template-editor-title">Редактор</h2>
+        <div class="btn-row">
+          <span id="template-editor-format" class="muted"></span>
+          <button type="button" class="secondary" id="template-editor-reload">Перезагрузить</button>
+          <button type="button" id="template-editor-save" disabled>Сохранить</button>
+          <button type="button" class="secondary" id="template-editor-close">Закрыть</button>
+        </div>
+      </div>
+      <div id="template-editor-host" class="config-editor-host" style="margin-top:0.75rem"></div>
+      <div id="template-editor-status" class="muted" style="margin-top:0.5rem"></div>
+    </section>
+  `;
+
+  document.getElementById("back-btn").addEventListener("click", () => navigate("/configs"));
+  document.getElementById("logout-btn").addEventListener("click", () => {
+    api.clearToken();
+    navigate("/login");
+  });
+  document.getElementById("templates-refresh")?.addEventListener("click", loadTemplatesList);
+  document.getElementById("template-editor-close")?.addEventListener("click", closeTemplateEditor);
+
+  await loadTemplatesList();
+}
+
+async function loadTemplatesList() {
+  const bodyEl = document.getElementById("templates-body");
+  if (!bodyEl) return;
+  bodyEl.className = "muted";
+  bodyEl.textContent = "Загрузка…";
+  try {
+    const data = await api.listTemplates();
+    if (!data.items?.length) {
+      bodyEl.innerHTML = `<div class="empty-state">Шаблоны не найдены в panel.yaml.</div>`;
+      return;
+    }
+    bodyEl.className = "";
+    bodyEl.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Профиль</th>
+              <th>Файл</th>
+              <th>Формат</th>
+              <th>Статус</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.items
+              .map(
+                (item) => `
+              <tr>
+                <td>${escapeHtml(item.profile)}</td>
+                <td><code>${escapeHtml(item.template_file)}</code></td>
+                <td>${escapeHtml((item.format || "").toUpperCase())}</td>
+                <td>${item.exists ? statusBadge("active", "Есть") : statusBadge("failed", "Нет файла")}</td>
+                <td>
+                  <button type="button" class="secondary template-edit-btn" data-profile="${escapeHtml(item.profile)}" ${item.exists ? "" : "disabled"}>
+                    Редактировать
+                  </button>
+                </td>
+              </tr>
+            `,
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+    bodyEl.querySelectorAll(".template-edit-btn").forEach((button) => {
+      button.addEventListener("click", () => openTemplateEditor(button.dataset.profile));
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      api.clearToken();
+      navigate("/login");
+      return;
+    }
+    bodyEl.className = "";
+    bodyEl.innerHTML = `<div class="error-box">${escapeHtml(errorMessage(error))}</div>`;
+  }
+}
+
+let templateEditor = null;
+let templateEditorProfile = null;
+let templateEditorFormat = "json";
+
+function closeTemplateEditor() {
+  const card = document.getElementById("template-editor-card");
+  card?.classList.add("hidden");
+  if (templateEditor) {
+    templateEditor.destroy();
+    templateEditor = null;
+  }
+  templateEditorProfile = null;
+  const host = document.getElementById("template-editor-host");
+  if (host) host.innerHTML = "";
+  const saveBtn = document.getElementById("template-editor-save");
+  if (saveBtn) saveBtn.disabled = true;
+}
+
+function syncTemplateSaveEnabled() {
+  const saveBtn = document.getElementById("template-editor-save");
+  if (!saveBtn) return;
+  saveBtn.disabled = !(templateEditor && !templateEditor.hasLintErrors());
+}
+
+async function openTemplateEditor(profile) {
+  const card = document.getElementById("template-editor-card");
+  const host = document.getElementById("template-editor-host");
+  const titleEl = document.getElementById("template-editor-title");
+  const formatEl = document.getElementById("template-editor-format");
+  const statusEl = document.getElementById("template-editor-status");
+  const reloadBtn = document.getElementById("template-editor-reload");
+  const saveBtn = document.getElementById("template-editor-save");
+  if (!card || !host || !saveBtn) return;
+
+  card.classList.remove("hidden");
+  templateEditorProfile = profile;
+  if (titleEl) titleEl.textContent = `Шаблон · ${profile}`;
+  if (statusEl) statusEl.textContent = "Загрузка…";
+  saveBtn.disabled = true;
+
+  async function load() {
+    if (reloadBtn) reloadBtn.disabled = true;
+    try {
+      const { createConfigEditor } = await import("./lib/config-editor.bundle.js");
+      const result = await api.getTemplate(profile);
+      templateEditorFormat = result.format === "yaml" ? "yaml" : "json";
+      if (formatEl) formatEl.textContent = templateEditorFormat.toUpperCase();
+      if (templateEditor) {
+        templateEditor.destroy();
+        templateEditor = null;
+        host.innerHTML = "";
+      }
+      templateEditor = createConfigEditor(host, {
+        format: templateEditorFormat,
+        doc: result.content || "",
+        onChange: () => syncTemplateSaveEnabled(),
+      });
+      syncTemplateSaveEnabled();
+      if (statusEl) statusEl.textContent = result.path || "";
+      templateEditor.focus();
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (error) {
+      if (statusEl) statusEl.textContent = "";
+      showToast(errorMessage(error), "error");
+    } finally {
+      if (reloadBtn) reloadBtn.disabled = false;
+    }
+  }
+
+  reloadBtn?.replaceWith(reloadBtn.cloneNode(true));
+  const freshReload = document.getElementById("template-editor-reload");
+  freshReload?.addEventListener("click", () => load());
+
+  saveBtn.replaceWith(saveBtn.cloneNode(true));
+  const freshSave = document.getElementById("template-editor-save");
+  freshSave?.addEventListener("click", async () => {
+    if (!templateEditor || !templateEditorProfile) return;
+    if (templateEditor.hasLintErrors()) {
+      syncTemplateSaveEnabled();
+      showToast("Исправьте ошибки синтаксиса перед сохранением", "error");
+      return;
+    }
+    if (!confirm("Сохранить шаблон на диск? Новые конфиги будут создаваться из него.")) return;
+    freshSave.disabled = true;
+    if (statusEl) statusEl.textContent = "Сохранение…";
+    try {
+      const result = await api.updateTemplate(templateEditorProfile, templateEditor.getValue());
+      templateEditor.setValue(result.content || "");
+      syncTemplateSaveEnabled();
+      if (statusEl) statusEl.textContent = result.path || "Сохранено";
+      showToast("Шаблон сохранён", "success");
+    } catch (error) {
+      if (statusEl) statusEl.textContent = "";
+      showToast(errorMessage(error), "error");
+      syncTemplateSaveEnabled();
+    }
+  });
+
+  await load();
 }
 
 async function handleRegenerateAll() {

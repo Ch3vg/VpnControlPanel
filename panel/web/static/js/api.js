@@ -92,6 +92,18 @@ export class ApiClient {
     return this.request("PUT", `/api/v1/configs/${id}/config-data`, payload);
   }
 
+  listTemplates() {
+    return this.request("GET", "/api/v1/templates");
+  }
+
+  getTemplate(profile) {
+    return this.request("GET", `/api/v1/templates/${encodeURIComponent(profile)}`);
+  }
+
+  updateTemplate(profile, content) {
+    return this.request("PUT", `/api/v1/templates/${encodeURIComponent(profile)}`, { content });
+  }
+
   createConfig(payload) {
     return this.request("POST", "/api/v1/configs", payload);
   }
