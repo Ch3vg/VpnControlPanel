@@ -1239,6 +1239,17 @@ function renderConfigDetailContent(config, status) {
             <input type="checkbox" id="config-logs-auto" checked>
             <span>Автообновление</span>
           </label>
+          <label class="field" style="margin:0;display:flex;align-items:center;gap:0.4rem">
+            <span class="muted" style="white-space:nowrap">Интервал</span>
+            <select id="config-logs-interval" style="width:auto;min-width:7rem">
+              <option value="2000">2 с</option>
+              <option value="5000" selected>5 с</option>
+              <option value="10000">10 с</option>
+              <option value="30000">30 с</option>
+              <option value="custom">Свой (мс)</option>
+            </select>
+            <input id="config-logs-interval-ms" type="number" min="500" max="600000" step="100" value="5000" class="hidden" style="width:7rem" title="Интервал в миллисекундах" aria-label="Интервал в миллисекундах">
+          </label>
           <button type="button" class="secondary" id="config-logs-refresh">Обновить</button>
         </div>
       </div>
@@ -1370,7 +1381,70 @@ function bindConfigLogs(configId) {
   const meta = document.getElementById("config-logs-meta");
   const refreshBtn = document.getElementById("config-logs-refresh");
   const autoEl = document.getElementById("config-logs-auto");
+  const intervalSelect = document.getElementById("config-logs-interval");
+  const intervalMsInput = document.getElementById("config-logs-interval-ms");
   if (!pre) return;
+
+  const STORAGE_KEY = "vcp.configLogs.pollMs";
+  const PRESETS = new Set(["2000", "5000", "10000", "30000"]);
+  const MIN_MS = 500;
+  const MAX_MS = 600000;
+
+  function clampMs(value) {
+    const n = Number.parseInt(String(value), 10);
+    if (!Number.isFinite(n)) return 5000;
+    return Math.min(MAX_MS, Math.max(MIN_MS, n));
+  }
+
+  function readStoredMs() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw == null) return 5000;
+      return clampMs(raw);
+    } catch {
+      return 5000;
+    }
+  }
+
+  function writeStoredMs(ms) {
+    try {
+      localStorage.setItem(STORAGE_KEY, String(ms));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function syncIntervalControlsFromStored() {
+    const ms = readStoredMs();
+    if (!intervalSelect || !intervalMsInput) return ms;
+    if (PRESETS.has(String(ms))) {
+      intervalSelect.value = String(ms);
+      intervalMsInput.classList.add("hidden");
+      intervalMsInput.value = String(ms);
+    } else {
+      intervalSelect.value = "custom";
+      intervalMsInput.classList.remove("hidden");
+      intervalMsInput.value = String(ms);
+    }
+    return ms;
+  }
+
+  function currentIntervalMs() {
+    if (!intervalSelect) return 5000;
+    if (intervalSelect.value === "custom") {
+      return clampMs(intervalMsInput?.value ?? 5000);
+    }
+    return clampMs(intervalSelect.value);
+  }
+
+  function syncCustomVisibility() {
+    if (!intervalSelect || !intervalMsInput) return;
+    const custom = intervalSelect.value === "custom";
+    intervalMsInput.classList.toggle("hidden", !custom);
+    if (custom && !intervalMsInput.value) {
+      intervalMsInput.value = "5000";
+    }
+  }
 
   async function load() {
     try {
@@ -1381,7 +1455,8 @@ function bindConfigLogs(configId) {
       if (meta) {
         const unit = result.service_name ? `unit ${result.service_name}` : "unit неизвестен";
         const state = result.available ? "ok" : "ошибка чтения";
-        meta.textContent = `${unit} · последние ${result.lines} строк · ${state}`;
+        const interval = currentIntervalMs();
+        meta.textContent = `${unit} · последние ${result.lines} строк · ${state} · poll ${interval} мс`;
       }
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -1396,13 +1471,29 @@ function bindConfigLogs(configId) {
 
   function syncAuto() {
     stopLogsPolling();
+    const ms = currentIntervalMs();
+    writeStoredMs(ms);
     if (autoEl?.checked) {
-      logsPollTimer = setInterval(load, 5000);
+      logsPollTimer = setInterval(load, ms);
     }
   }
 
+  syncIntervalControlsFromStored();
+  syncCustomVisibility();
+
   refreshBtn?.addEventListener("click", () => load());
   autoEl?.addEventListener("change", syncAuto);
+  intervalSelect?.addEventListener("change", () => {
+    syncCustomVisibility();
+    if (intervalSelect.value !== "custom") {
+      if (intervalMsInput) intervalMsInput.value = intervalSelect.value;
+    }
+    syncAuto();
+  });
+  intervalMsInput?.addEventListener("change", () => {
+    intervalMsInput.value = String(clampMs(intervalMsInput.value));
+    syncAuto();
+  });
   load();
   syncAuto();
 }

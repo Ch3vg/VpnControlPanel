@@ -261,7 +261,7 @@ Sudoers (`/etc/sudoers.d/vpn-worker`, `make install-sudoers`):
 - `/usr/local/bin/vpn-systemctl` — per-config units `vpn-{config_id}` (`systemd.per_config: true`); доступен `vpn-worker` и `vpn-panel` (API delete / чтение journal через `logs`)
 - Legacy: `xray_reality`, `xray_grpc`, … — если `systemd.per_config: false`
 
-Действие `vpn-systemctl logs <vpn-uuid> [N]` отдаёт хвост `journalctl -u … -n N` (до 500 строк). UI: страница конфига → «Логи сервиса» (polling `GET /api/v1/configs/{id}/logs` каждые 5 с). После обновления кода: `make render && sudo bash deploy/scripts/install-vpn-systemctl.sh` (или `sudo make update`).
+Действие `vpn-systemctl logs <vpn-uuid> [N]` отдаёт хвост `journalctl -u … -n N` (до 500 строк). UI: страница конфига → «Логи сервиса» (polling `GET /api/v1/configs/{id}/logs`; интервал 2/5/10/30 с или свой в мс, min 500). После обновления кода: `make render && sudo bash deploy/scripts/install-vpn-systemctl.sh` (или `sudo make update`).
 
 При `systemd.per_config: true` воркер при create/regenerate:
 
