@@ -37,8 +37,95 @@ const REGENERATE_POLICY_FIELDS = {
   ],
 };
 
-function policyFieldsForProfile(profile) {
-  return REGENERATE_POLICY_FIELDS[profile] || [];
+function isLongPublicKey(value) {
+  const text = String(value || "");
+  return text.includes("BEGIN ") || text.length > 96;
+}
+
+function publicKeyPreview(value) {
+  const text = String(value || "").trim();
+  if (!text) return "—";
+  if (!isLongPublicKey(text)) return text;
+  const first = text.split(/\r?\n/).find((line) => line.trim()) || text;
+  const compact = first.length > 64 ? `${first.slice(0, 64)}…` : first;
+  return compact;
+}
+
+function renderPublicKeyField(version) {
+  const value = version?.public_key || "";
+  if (!value) {
+    return `<dl class="detail-item"><dt>Public key</dt><dd>—</dd></dl>`;
+  }
+  const downloadName = value.includes("BEGIN CERTIFICATE")
+    ? `config-${version.id || "cert"}.pem`
+    : `config-${version.id || "key"}.txt`;
+  if (!isLongPublicKey(value)) {
+    return `
+      <dl class="detail-item detail-item-wide">
+        <dt>Public key</dt>
+        <dd>
+          <code class="key-inline">${escapeHtml(value)}</code>
+          <div class="btn-row" style="margin-top:0.5rem">
+            <button type="button" class="secondary download-public-key-btn" data-filename="${escapeHtml(downloadName)}">Скачать</button>
+          </div>
+          <textarea class="public-key-source hidden" readonly>${escapeHtml(value)}</textarea>
+        </dd>
+      </dl>
+    `;
+  }
+  return `
+    <dl class="detail-item detail-item-wide">
+      <dt>Public key / сертификат</dt>
+      <dd>
+        <details class="pem-fold">
+          <summary>${escapeHtml(publicKeyPreview(value))} · развернуть</summary>
+          <pre class="pem-body">${escapeHtml(value)}</pre>
+        </details>
+        <div class="btn-row" style="margin-top:0.5rem">
+          <button type="button" class="secondary download-public-key-btn" data-filename="${escapeHtml(downloadName)}">Скачать</button>
+        </div>
+        <textarea class="public-key-source hidden" readonly>${escapeHtml(value)}</textarea>
+      </dd>
+    </dl>
+  `;
+}
+
+function renderVersionCardHtml(version) {
+  return `
+    <h2 class="card-title">Текущая версия</h2>
+    <div class="detail-grid">
+      <dl class="detail-item"><dt>Порт</dt><dd>${version.port}</dd></dl>
+      ${renderPublicKeyField(version)}
+      <dl class="detail-item"><dt>Cert fingerprint</dt><dd class="break-all">${escapeHtml(version.cert_fingerprint || "—")}</dd></dl>
+      <dl class="detail-item"><dt>Создана</dt><dd>${escapeHtml(formatDate(version.created_at))}</dd></dl>
+    </div>
+  `;
+}
+
+function bindPublicKeyDownload(root = document) {
+  root.querySelectorAll(".download-public-key-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const source = button.closest("dd")?.querySelector(".public-key-source");
+      const text = source?.value || source?.textContent || "";
+      if (!text) {
+        showToast("Нечего скачивать", "error");
+        return;
+      }
+      downloadTextFile(button.dataset.filename || "public-key.txt", text);
+    });
+  });
+}
+
+function downloadTextFile(filename, text) {
+  const blob = new Blob([text], { type: "application/x-pem-file;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function renderPolicyChecksHtml(profile, values = {}) {
@@ -868,15 +955,8 @@ function patchConfigDetailStatus(config, status) {
   const versionCard = document.getElementById("detail-version-card");
   const version = config.current_version_detail;
   if (versionCard && version) {
-    versionCard.innerHTML = `
-      <h2 class="card-title">Текущая версия</h2>
-      <div class="detail-grid">
-        <dl class="detail-item"><dt>Порт</dt><dd>${version.port}</dd></dl>
-        <dl class="detail-item"><dt>Public key</dt><dd>${escapeHtml(version.public_key || "—")}</dd></dl>
-        <dl class="detail-item"><dt>Cert fingerprint</dt><dd>${escapeHtml(version.cert_fingerprint || "—")}</dd></dl>
-        <dl class="detail-item"><dt>Создана</dt><dd>${escapeHtml(formatDate(version.created_at))}</dd></dl>
-      </div>
-    `;
+    versionCard.innerHTML = renderVersionCardHtml(version);
+    bindPublicKeyDownload(versionCard);
   }
   const regenerateBtn = document.getElementById("regenerate-btn");
   if (regenerateBtn) {
@@ -932,16 +1012,29 @@ function renderConfigDetailContent(config, status) {
       version
         ? `
       <section class="card" id="detail-version-card">
-        <h2 class="card-title">Текущая версия</h2>
-        <div class="detail-grid">
-          <dl class="detail-item"><dt>Порт</dt><dd>${version.port}</dd></dl>
-          <dl class="detail-item"><dt>Public key</dt><dd>${escapeHtml(version.public_key || "—")}</dd></dl>
-          <dl class="detail-item"><dt>Cert fingerprint</dt><dd>${escapeHtml(version.cert_fingerprint || "—")}</dd></dl>
-          <dl class="detail-item"><dt>Создана</dt><dd>${escapeHtml(formatDate(version.created_at))}</dd></dl>
-        </div>
+        ${renderVersionCardHtml(version)}
       </section>
     `
         : `<section class="card" id="detail-version-card" hidden></section>`
+    }
+
+    ${
+      version
+        ? `
+      <section class="card" id="config-editor-card">
+        <div class="toolbar">
+          <h2 class="card-title" style="margin:0">Конфигурация</h2>
+          <div class="btn-row">
+            <button type="button" class="secondary" id="config-editor-load">Загрузить</button>
+            <button type="button" id="config-editor-save" disabled>Сохранить</button>
+          </div>
+        </div>
+        <p class="muted" style="margin:0.5rem 0 0.75rem">Текущий config_data (JSON). Сохранение перезапишет live-файлы и перезапустит сервис.</p>
+        <textarea id="config-editor" class="config-editor" spellcheck="false" placeholder="Нажмите «Загрузить»…"></textarea>
+        <div id="config-editor-status" class="muted" style="margin-top:0.5rem"></div>
+      </section>
+    `
+        : ""
     }
 
     ${
@@ -994,6 +1087,8 @@ function renderConfigDetailContent(config, status) {
   document.getElementById("save-policy-btn")?.addEventListener("click", () =>
     handleSavePolicy(config.id),
   );
+  bindPublicKeyDownload(bodyEl);
+  bindConfigEditor(config.id);
   bindShareTtlSelect("share-ttl");
   document.getElementById("share-secure-btn")?.addEventListener("click", () =>
     handleShare(config.id, true),
@@ -1022,6 +1117,66 @@ async function handleSavePolicy(configId) {
   } finally {
     if (button) button.disabled = false;
   }
+}
+
+function bindConfigEditor(configId) {
+  const editor = document.getElementById("config-editor");
+  const loadBtn = document.getElementById("config-editor-load");
+  const saveBtn = document.getElementById("config-editor-save");
+  const statusEl = document.getElementById("config-editor-status");
+  if (!editor || !loadBtn || !saveBtn) return;
+
+  let loaded = false;
+
+  loadBtn.addEventListener("click", async () => {
+    loadBtn.disabled = true;
+    statusEl.textContent = "Загрузка…";
+    try {
+      const result = await api.getConfigData(configId);
+      editor.value = JSON.stringify(result.config_data, null, 2);
+      loaded = true;
+      saveBtn.disabled = false;
+      statusEl.textContent = `Версия ${result.version} · ${result.profile}`;
+    } catch (error) {
+      statusEl.textContent = "";
+      showToast(errorMessage(error), "error");
+    } finally {
+      loadBtn.disabled = false;
+    }
+  });
+
+  saveBtn.addEventListener("click", async () => {
+    if (!loaded) {
+      showToast("Сначала загрузите конфигурацию", "error");
+      return;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(editor.value);
+    } catch (error) {
+      showToast(`Некорректный JSON: ${errorMessage(error)}`, "error");
+      return;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      showToast("Корень JSON должен быть объектом", "error");
+      return;
+    }
+    if (!confirm("Сохранить конфигурацию и перезаписать live-файлы?")) return;
+    saveBtn.disabled = true;
+    statusEl.textContent = "Сохранение…";
+    try {
+      const result = await api.updateConfigData(configId, parsed);
+      editor.value = JSON.stringify(result.config_data, null, 2);
+      statusEl.textContent = `Сохранено · версия ${result.version}`;
+      showToast("Конфигурация сохранена", "success");
+      await loadConfigDetail(configId);
+    } catch (error) {
+      statusEl.textContent = "";
+      showToast(errorMessage(error), "error");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
 }
 
 async function handleRegenerate(configId) {

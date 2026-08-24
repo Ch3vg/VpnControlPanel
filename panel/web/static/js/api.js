@@ -83,6 +83,14 @@ export class ApiClient {
     return this.request("GET", `/api/v1/configs/${id}/status`);
   }
 
+  getConfigData(id) {
+    return this.request("GET", `/api/v1/configs/${id}/config-data`);
+  }
+
+  updateConfigData(id, config_data) {
+    return this.request("PUT", `/api/v1/configs/${id}/config-data`, { config_data });
+  }
+
   createConfig(payload) {
     return this.request("POST", "/api/v1/configs", payload);
   }

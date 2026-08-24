@@ -233,6 +233,33 @@ class VpnConfigRepository:
         )
         await self._session.flush()
 
+    async def update_version_config_data(
+        self,
+        config_id: uuid.UUID,
+        version: int,
+        *,
+        config_data: dict,
+        port: int,
+        updated_by: uuid.UUID,
+    ) -> None:
+        config_model = await self._get_model(config_id)
+        if config_model is None:
+            raise ValueError(f"Config not found: {config_id}")
+        result = await self._session.execute(
+            select(VpnConfigVersionModel).where(
+                VpnConfigVersionModel.config_id == config_id,
+                VpnConfigVersionModel.version == version,
+            ),
+        )
+        version_model = result.scalar_one_or_none()
+        if version_model is None:
+            raise ValueError(f"Version not found: {config_id} v{version}")
+        version_model.config_data = config_data
+        version_model.port = port
+        config_model.updated_by = updated_by
+        config_model.updated_at = datetime.now(UTC)
+        await self._session.flush()
+
     async def _get_model(
         self,
         config_id: uuid.UUID,

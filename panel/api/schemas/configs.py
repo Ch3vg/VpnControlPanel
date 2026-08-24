@@ -63,6 +63,17 @@ class UpdateRegeneratePolicyRequest(BaseModel):
     regenerate_policy: dict[str, bool]
 
 
+class ConfigDataResponse(BaseModel):
+    config_id: str
+    version: int
+    profile: str
+    config_data: dict
+
+
+class UpdateConfigDataRequest(BaseModel):
+    config_data: dict
+
+
 class RegenerateConfigResponse(BaseModel):
     task_id: str
     config_id: str

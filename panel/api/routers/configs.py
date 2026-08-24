@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from panel.api.deps import CurrentUserDep, SettingsDep, get_db_session, make_audit_service
 from panel.api.schemas.configs import (
+    ConfigDataResponse,
     ConfigDetailResponse,
     ConfigListResponse,
     ConfigRuntimeListResponse,
@@ -16,6 +17,7 @@ from panel.api.schemas.configs import (
     CreateConfigResponse,
     RegenerateAllResponse,
     RegenerateConfigResponse,
+    UpdateConfigDataRequest,
     UpdateRegeneratePolicyRequest,
     config_to_detail,
     config_to_list_item,
@@ -30,7 +32,14 @@ from panel.application.configs import (
     UpdateRegeneratePolicyUseCase,
 )
 from panel.application.create_config import CreateConfigUseCase
+from panel.application.update_config_data import (
+    ConfigDataUnavailable,
+    GetConfigDataUseCase,
+    InvalidConfigData,
+    UpdateConfigDataUseCase,
+)
 from panel.domain.value_objects.regenerate_policy import RegeneratePolicy
+from panel.infrastructure.crypto import FieldEncryptor
 from panel.application.create_share_link import (
     ConfigNotShareable,
     CreateShareLinkUseCase,
@@ -258,6 +267,63 @@ async def get_config_status(
         runtime_systemd_active=result.runtime_systemd_active,
         runtime_port_listening=result.runtime_port_listening,
         runtime_detail=result.runtime_detail,
+    )
+
+
+@router.get("/{config_id}/config-data", response_model=ConfigDataResponse)
+async def get_config_data(
+    config_id: uuid.UUID,
+    _user: CurrentUserDep,
+    settings: SettingsDep,
+    session: AsyncSession = Depends(get_db_session),
+) -> ConfigDataResponse:
+    use_case = GetConfigDataUseCase(
+        settings,
+        VpnConfigRepository(session),
+        FieldEncryptor(settings.security.encryption_key),
+    )
+    try:
+        result = await use_case.execute(config_id)
+    except ConfigNotFound:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found") from None
+    except ConfigDataUnavailable as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None
+    return ConfigDataResponse(
+        config_id=str(result.config_id),
+        version=result.version,
+        profile=result.profile,
+        config_data=result.config_data,
+    )
+
+
+@router.put("/{config_id}/config-data", response_model=ConfigDataResponse)
+async def update_config_data(
+    config_id: uuid.UUID,
+    body: UpdateConfigDataRequest,
+    user: CurrentUserDep,
+    settings: SettingsDep,
+    session: AsyncSession = Depends(get_db_session),
+) -> ConfigDataResponse:
+    use_case = UpdateConfigDataUseCase(
+        settings,
+        VpnConfigRepository(session),
+        FieldEncryptor(settings.security.encryption_key),
+        make_audit_service(settings, session),
+    )
+    try:
+        result = await use_case.execute(config_id, user, body.config_data)
+    except ConfigNotFound:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found") from None
+    except ConfigDataUnavailable as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None
+    except InvalidConfigData as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from None
+    await session.commit()
+    return ConfigDataResponse(
+        config_id=str(result.config_id),
+        version=result.version,
+        profile=result.profile,
+        config_data=result.config_data,
     )
 
 
