@@ -89,6 +89,9 @@ vpn:
       port_candidates: [8443, 2053, 2083, 2096, 9443, 10443, 4433, 8444]
       cert_dir: ${VCP_CERT_DIR}
       cert_prefix: grpc
+      # Stable LE (optional): set both to avoid self-signed overwrite on regenerate
+      # tls_cert_file: /etc/letsencrypt/live/example.com/fullchain.pem
+      # tls_key_file: /etc/letsencrypt/live/example.com/privkey.pem
       grpc_sni_hosts: [ya.ru, gosuslugi.ru, www.microsoft.com, vk.com, kremlin.ru, pochta.ru, government.ru, rzd.ru]
       grpc_service_names: [Drive, Download, Api, TunService, v1.Messenger, grpc.health.v1.Health]
     xray-xhttp:
@@ -99,6 +102,8 @@ vpn:
       port_candidates: [8443, 9443, 10443, 8080, 8444, 2083, 2096, 8888]
       cert_dir: ${VCP_CERT_DIR}
       cert_prefix: xhttp
+      # tls_cert_file: /etc/letsencrypt/live/example.com/fullchain.pem
+      # tls_key_file: /etc/letsencrypt/live/example.com/privkey.pem
       xhttp_hosts: []
       xhttp_paths: [/search, /assets, /api, /download, /news, /login]
     hysteria2:
@@ -109,6 +114,8 @@ vpn:
       port_candidates: [8443, 3478, 8800, 1935, 8080, 5000, 9443, 10443]
       cert_dir: ${VCP_CERT_DIR}
       cert_prefix: hysteria
+      # tls_cert_file: /etc/letsencrypt/live/example.com/fullchain.pem
+      # tls_key_file: /etc/letsencrypt/live/example.com/privkey.pem
 
 telegram:
   enabled: false

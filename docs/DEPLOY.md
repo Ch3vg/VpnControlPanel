@@ -218,6 +218,21 @@ VCP_PANEL_TLS_KEY=/etc/letsencrypt/live/panel.example.com/privkey.pem
 
 Опционально в профиле: `share_public_host` (override `vpn.public_host` в share/TLS), `nginx_stream_conf`, `nginx_panel_backend` (по умолчанию `127.0.0.1:8443`).
 
+### Стабильный Let’s Encrypt на regenerate
+
+Для профилей с TLS (xHTTP / gRPC / Hysteria) укажите в профиле `panel.yaml` пути к LE:
+
+```yaml
+tls_cert_file: /etc/letsencrypt/live/example.com/fullchain.pem
+tls_key_file: /etc/letsencrypt/live/example.com/privkey.pem
+```
+
+Тогда create/regenerate **не** перезаписывает cert/key self-signed и пишет в inbound эти пути. Дефолт `rotate_tls` для новых конфигов становится `false`.
+
+### Regenerate policy при создании
+
+`POST /api/v1/configs` принимает опциональное `regenerate_policy` (флаги `rotate_port`, `rotate_client_id`, `rotate_reality_keys`, `rotate_short_ids`, `rotate_dest`, `rotate_path`, `rotate_service_name`, `rotate_tls`, `rotate_auth`, `rotate_obfs`). В админке — чекбоксы «При regenerate ротировать». Старые конфиги с `NULL` в БД используют дефолты `RegeneratePolicy.for_profile`.
+
 Без нормального LE для панели ветка HTTPS на 443 (SNI панели) будет с self-signed (браузер предупредит); **HTTP :80 остаётся без редиректа и без сертификата**. Reality-ветка на 443 при этом работает.
 
 ---

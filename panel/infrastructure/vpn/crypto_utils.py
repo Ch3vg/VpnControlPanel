@@ -11,6 +11,11 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 
+def cert_fingerprint_sha256(cert_pem: str) -> str:
+    cert = x509.load_pem_x509_certificate(cert_pem.encode("utf-8"))
+    return hashlib.sha256(cert.public_bytes(serialization.Encoding.DER)).hexdigest()
+
+
 def generate_self_signed_cert(*, dns_names: list[str] | None = None) -> tuple[str, str, str]:
     """Return private_key_pem, cert_pem, sha256 fingerprint hex.
 
@@ -45,7 +50,7 @@ def generate_self_signed_cert(*, dns_names: list[str] | None = None) -> tuple[st
         encryption_algorithm=serialization.NoEncryption(),
     ).decode("utf-8")
     cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode("utf-8")
-    fingerprint = hashlib.sha256(cert.public_bytes(serialization.Encoding.DER)).hexdigest()
+    fingerprint = cert_fingerprint_sha256(cert_pem)
     return private_pem, cert_pem, fingerprint
 
 
@@ -70,3 +75,21 @@ def cert_has_dns_san(cert_pem: str, *, required_name: str | None = None) -> bool
     if required_name is None:
         return True
     return required_name in names
+
+
+def cert_matches_private_key(cert_pem: str, private_key_pem: str) -> bool:
+    """Return True if the certificate public key matches the private key."""
+    try:
+        cert = x509.load_pem_x509_certificate(cert_pem.encode("utf-8"))
+        key = serialization.load_pem_private_key(private_key_pem.encode("utf-8"), password=None)
+    except (ValueError, TypeError):
+        return False
+    cert_pub = cert.public_key().public_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    key_pub = key.public_key().public_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    return cert_pub == key_pub

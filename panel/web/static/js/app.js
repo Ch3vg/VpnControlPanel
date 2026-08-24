@@ -9,6 +9,34 @@ const PROFILES = {
   hysteria2: [{ value: "hysteria2", label: "Hysteria2" }],
 };
 
+const REGENERATE_POLICY_FIELDS = {
+  "xray-reality": [
+    { key: "rotate_port", label: "Порт", default: true },
+    { key: "rotate_client_id", label: "UUID клиента", default: true },
+    { key: "rotate_reality_keys", label: "Reality privateKey / pbk", default: true },
+    { key: "rotate_short_ids", label: "shortIds", default: true },
+    { key: "rotate_dest", label: "dest / serverNames", default: true },
+  ],
+  "xray-xhttp": [
+    { key: "rotate_port", label: "Порт", default: true },
+    { key: "rotate_client_id", label: "UUID клиента", default: true },
+    { key: "rotate_path", label: "xHTTP path", default: true },
+    { key: "rotate_tls", label: "TLS cert (self-signed)", default: true },
+  ],
+  "xray-grpc": [
+    { key: "rotate_port", label: "Порт", default: true },
+    { key: "rotate_client_id", label: "UUID клиента", default: true },
+    { key: "rotate_service_name", label: "gRPC serviceName", default: false },
+    { key: "rotate_tls", label: "TLS cert (self-signed)", default: true },
+  ],
+  hysteria2: [
+    { key: "rotate_port", label: "Порт", default: true },
+    { key: "rotate_tls", label: "TLS cert (self-signed)", default: true },
+    { key: "rotate_auth", label: "Hysteria auth", default: false },
+    { key: "rotate_obfs", label: "Hysteria obfs", default: false },
+  ],
+};
+
 const STATUS_LABELS = {
   pending: "Ожидание",
   processing: "Обработка",
@@ -639,6 +667,10 @@ function openCreateDialog() {
         <label for="create-profile">Профиль</label>
         <select id="create-profile"></select>
       </div>
+      <fieldset class="field" id="create-policy-fieldset">
+        <legend>При regenerate ротировать</legend>
+        <div id="create-policy-fields"></div>
+      </fieldset>
       <div id="create-error" class="error-box hidden"></div>
       <div class="btn-row">
         <button type="submit">Создать</button>
@@ -649,15 +681,32 @@ function openCreateDialog() {
 
   const protocolEl = dialog.querySelector("#create-protocol");
   const profileEl = dialog.querySelector("#create-profile");
+  const policyFieldsEl = dialog.querySelector("#create-policy-fields");
+
+  function syncPolicyFields() {
+    const fields = REGENERATE_POLICY_FIELDS[profileEl.value] || [];
+    policyFieldsEl.innerHTML = fields
+      .map(
+        (item) => `
+          <label style="display:flex;gap:0.5rem;align-items:center;margin:0.25rem 0">
+            <input type="checkbox" data-policy-key="${escapeHtml(item.key)}" ${item.default ? "checked" : ""}>
+            <span>${escapeHtml(item.label)}</span>
+          </label>
+        `,
+      )
+      .join("");
+  }
 
   function syncProfiles() {
     const protocol = protocolEl.value;
     profileEl.innerHTML = PROFILES[protocol]
       .map((item) => `<option value="${item.value}">${escapeHtml(item.label)}</option>`)
       .join("");
+    syncPolicyFields();
   }
 
   protocolEl.addEventListener("change", syncProfiles);
+  profileEl.addEventListener("change", syncPolicyFields);
   syncProfiles();
 
   dialog.querySelector("#create-cancel").addEventListener("click", () => dialog.close());
@@ -668,11 +717,17 @@ function openCreateDialog() {
     const submitBtn = dialog.querySelector("button[type=submit]");
     submitBtn.disabled = true;
 
+    const regenerate_policy = {};
+    policyFieldsEl.querySelectorAll("input[data-policy-key]").forEach((input) => {
+      regenerate_policy[input.dataset.policyKey] = input.checked;
+    });
+
     try {
       const result = await api.createConfig({
         name: dialog.querySelector("#create-name").value.trim(),
         protocol: protocolEl.value,
         profile: profileEl.value,
+        regenerate_policy,
       });
       dialog.close();
       showToast("Конфиг создаётся…", "success");

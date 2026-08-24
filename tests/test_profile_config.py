@@ -35,8 +35,17 @@ def test_xray_reality_template_build(panel_settings) -> None:
 
 
 def test_xray_reality_regenerate_keeps_keys(panel_settings) -> None:
+    from panel.domain.value_objects.regenerate_policy import RegeneratePolicy
+
     builder = ProfileConfigBuilder(panel_settings)
     first = builder.build(ConfigProfile.XRAY_REALITY, name="Office")
+    keep = RegeneratePolicy(
+        rotate_port=True,
+        rotate_client_id=False,
+        rotate_reality_keys=False,
+        rotate_short_ids=True,
+        rotate_dest=True,
+    )
     second = builder.build(
         ConfigProfile.XRAY_REALITY,
         name="Office",
@@ -45,6 +54,7 @@ def test_xray_reality_regenerate_keeps_keys(panel_settings) -> None:
             private_key=first.private_key,
             public_key=first.public_key,
         ),
+        policy=keep,
     )
     assert second.client_id == first.client_id
     assert second.private_key == first.private_key
@@ -54,6 +64,8 @@ def test_xray_reality_regenerate_keeps_keys(panel_settings) -> None:
 
 
 def test_xray_xhttp_tls_and_regenerate_keeps_cert(panel_settings) -> None:
+    from panel.domain.value_objects.regenerate_policy import RegeneratePolicy
+
     builder = ProfileConfigBuilder(panel_settings)
     first = builder.build(ConfigProfile.XRAY_XHTTP, name="Office")
     stream = first.config_data["inbounds"][0]["streamSettings"]
@@ -67,6 +79,7 @@ def test_xray_xhttp_tls_and_regenerate_keeps_cert(panel_settings) -> None:
     assert first.extra_files["cert"]
     assert first.extra_files["key"]
 
+    keep = RegeneratePolicy(rotate_client_id=False, rotate_path=True, rotate_tls=False, rotate_port=True)
     second = builder.build(
         ConfigProfile.XRAY_XHTTP,
         name="Office",
@@ -76,6 +89,7 @@ def test_xray_xhttp_tls_and_regenerate_keeps_cert(panel_settings) -> None:
             public_key=first.public_key,
             cert_fingerprint=first.cert_fingerprint,
         ),
+        policy=keep,
     )
     assert second.client_id == first.client_id
     assert second.cert_fingerprint == first.cert_fingerprint
@@ -97,8 +111,11 @@ def test_hysteria2_writes_cert_paths(panel_settings, tmp_path) -> None:
 
 
 def test_hysteria2_regenerate_keeps_password_and_san_cert(panel_settings) -> None:
+    from panel.domain.value_objects.regenerate_policy import RegeneratePolicy
+
     builder = ProfileConfigBuilder(panel_settings)
     first = builder.build(ConfigProfile.HYSTERIA2, name="Office")
+    keep = RegeneratePolicy(rotate_auth=False, rotate_obfs=False, rotate_tls=False, rotate_port=True)
     second = builder.build(
         ConfigProfile.HYSTERIA2,
         name="Office",
@@ -109,6 +126,7 @@ def test_hysteria2_regenerate_keeps_password_and_san_cert(panel_settings) -> Non
             public_key=first.public_key,
             cert_fingerprint=first.cert_fingerprint,
         ),
+        policy=keep,
     )
     assert second.config_data["auth"]["password"] == first.config_data["auth"]["password"]
     assert second.config_data["obfs"]["salamander"]["password"] == first.config_data["obfs"]["salamander"]["password"]

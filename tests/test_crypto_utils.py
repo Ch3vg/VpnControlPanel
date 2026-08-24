@@ -55,3 +55,12 @@ def test_cert_has_dns_san_rejects_cn_only() -> None:
     assert cert_has_dns_san(good_pem) is True
     assert cert_has_dns_san(good_pem, required_name="vpn.example.com") is True
     assert cert_has_dns_san(good_pem, required_name="other.example") is False
+
+
+def test_cert_matches_private_key() -> None:
+    from panel.infrastructure.vpn.crypto_utils import cert_matches_private_key
+
+    key_pem, cert_pem, _fp = generate_self_signed_cert(dns_names=["vpn.example.com"])
+    other_key, _other_cert, _ = generate_self_signed_cert(dns_names=["vpn.example.com"])
+    assert cert_matches_private_key(cert_pem, key_pem) is True
+    assert cert_matches_private_key(cert_pem, other_key) is False

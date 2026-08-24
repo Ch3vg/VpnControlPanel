@@ -12,8 +12,15 @@ from cryptography.hazmat.primitives.asymmetric import x25519
 
 from panel.config import PanelSettings, VpnProfileSettings
 from panel.domain.value_objects.config_profile import ConfigProfile
+from panel.domain.value_objects.regenerate_policy import RegeneratePolicy
 from panel.infrastructure.filesystem.writer import atomic_write
-from panel.infrastructure.vpn.crypto_utils import cert_has_dns_san, generate_self_signed_cert, to_base64
+from panel.infrastructure.vpn.crypto_utils import (
+    cert_fingerprint_sha256,
+    cert_has_dns_san,
+    cert_matches_private_key,
+    generate_self_signed_cert,
+    to_base64,
+)
 from panel.infrastructure.vpn.port_picker import pick_port
 from panel.infrastructure.vpn.client_uri import build_share_uris, dest_hostname
 from panel.infrastructure.vpn.template_loader import find_inbound, load_template, set_client_id
@@ -40,6 +47,12 @@ class PreviousSecrets:
     cert_fingerprint: str | None = None
     password: str | None = None
     obfs_password: str | None = None
+    short_ids: list[str] | None = None
+    reality_dest: str | None = None
+    reality_server_names: list[str] | None = None
+    xhttp_path: str | None = None
+    grpc_service_name: str | None = None
+    grpc_sni: str | None = None
 
 
 def listening_port(profile: ConfigProfile, config_data: dict[str, Any], profile_settings: VpnProfileSettings) -> int:
@@ -63,28 +76,50 @@ class ProfileConfigBuilder:
         preferred_port: int | None = None,
         preferred_grpc_sni: str | None = None,
         preferred_grpc_service_name: str | None = None,
+        policy: RegeneratePolicy | None = None,
     ) -> BuildResult:
         profile_settings = self._settings.vpn.profiles[profile.value]
         template_path = self._resolve_template_path(profile_settings.template_file)
         config = load_template(template_path)
+        resolved = policy or RegeneratePolicy.for_profile(profile, profile_settings)
 
         if profile is ConfigProfile.XRAY_REALITY:
             result = self._build_xray_reality(
-                config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
+                config,
+                profile_settings,
+                previous=previous,
+                exclude_ports=exclude_ports,
+                preferred_port=preferred_port,
+                policy=resolved,
             )
         elif profile is ConfigProfile.XRAY_GRPC:
             result = self._build_xray_grpc(
-                config, profile_settings, previous=previous, exclude_ports=exclude_ports,
-                preferred_port=preferred_port, preferred_grpc_sni=preferred_grpc_sni,
+                config,
+                profile_settings,
+                previous=previous,
+                exclude_ports=exclude_ports,
+                preferred_port=preferred_port,
+                preferred_grpc_sni=preferred_grpc_sni,
                 preferred_grpc_service_name=preferred_grpc_service_name,
+                policy=resolved,
             )
         elif profile is ConfigProfile.XRAY_XHTTP:
             result = self._build_xray_xhttp(
-                config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
+                config,
+                profile_settings,
+                previous=previous,
+                exclude_ports=exclude_ports,
+                preferred_port=preferred_port,
+                policy=resolved,
             )
         elif profile is ConfigProfile.HYSTERIA2:
             result = self._build_hysteria2(
-                config, profile_settings, previous=previous, exclude_ports=exclude_ports, preferred_port=preferred_port,
+                config,
+                profile_settings,
+                previous=previous,
+                exclude_ports=exclude_ports,
+                preferred_port=preferred_port,
+                policy=resolved,
             )
         else:
             raise ValueError(f"Unsupported profile: {profile}")
@@ -243,6 +278,7 @@ class ProfileConfigBuilder:
         previous: PreviousSecrets | None,
         exclude_ports: set[int] | None,
         preferred_port: int | None,
+        policy: RegeneratePolicy,
     ) -> BuildResult:
         inbound_tag = profile.inbound_tag
         port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
@@ -251,27 +287,42 @@ class ProfileConfigBuilder:
         if profile.listen_address:
             inbound["listen"] = profile.listen_address
 
-        if previous and previous.client_id and previous.private_key and previous.public_key:
+        if previous and previous.client_id and not policy.rotate_client_id:
             client_id = previous.client_id
+        else:
+            client_id = str(uuid.uuid4())
+
+        if previous and previous.private_key and previous.public_key and not policy.rotate_reality_keys:
             private_key = previous.private_key
             public_key = previous.public_key
         else:
-            client_id = str(uuid.uuid4())
             private_key_obj = x25519.X25519PrivateKey.generate()
             public_key_obj = private_key_obj.public_key()
             private_key = to_base64(private_key_obj.private_bytes_raw())
             public_key = to_base64(public_key_obj.public_bytes_raw())
 
-        short_ids = [secrets.token_hex(4) for _ in range(3)]
         reality = inbound["streamSettings"]["realitySettings"]
+        if previous and previous.short_ids and not policy.rotate_short_ids:
+            short_ids = list(previous.short_ids)
+        else:
+            short_ids = [secrets.token_hex(4) for _ in range(3)]
         reality["shortIds"] = short_ids
         reality["privateKey"] = private_key
-        if profile.reality_dest_hosts:
-            reality["dest"] = random.choice(profile.reality_dest_hosts)
-        # SNI must equal dest hostname (TSPU flags mismatched SNI/dest pools).
-        dest_host = dest_hostname(str(reality.get("dest") or ""))
-        if dest_host:
-            reality["serverNames"] = [dest_host]
+
+        if previous and previous.reality_dest and not policy.rotate_dest:
+            reality["dest"] = previous.reality_dest
+            if previous.reality_server_names:
+                reality["serverNames"] = list(previous.reality_server_names)
+            else:
+                dest_host = dest_hostname(str(reality.get("dest") or ""))
+                if dest_host:
+                    reality["serverNames"] = [dest_host]
+        else:
+            if profile.reality_dest_hosts:
+                reality["dest"] = random.choice(profile.reality_dest_hosts)
+            dest_host = dest_hostname(str(reality.get("dest") or ""))
+            if dest_host:
+                reality["serverNames"] = [dest_host]
         set_client_id(config, client_id, inbound_tag)
 
         return BuildResult(
@@ -292,6 +343,7 @@ class ProfileConfigBuilder:
         preferred_port: int | None,
         preferred_grpc_sni: str | None = None,
         preferred_grpc_service_name: str | None = None,
+        policy: RegeneratePolicy,
     ) -> BuildResult:
         inbound_tag = profile.inbound_tag
         port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
@@ -300,7 +352,7 @@ class ProfileConfigBuilder:
         if profile.listen_address:
             inbound["listen"] = profile.listen_address
 
-        if previous and previous.client_id:
+        if previous and previous.client_id and not policy.rotate_client_id:
             client_id = previous.client_id
         else:
             client_id = str(uuid.uuid4())
@@ -310,27 +362,27 @@ class ProfileConfigBuilder:
         tls["alpn"] = ["h2"]
         tls.pop("fingerprint", None)
         tls_name = self._tls_server_name(profile)
-        # Own-domain mux (share_public_host): SNI must match the public hostname / LE cert.
         if (profile.share_public_host or "").strip():
             tls["serverName"] = tls_name
         elif profile.grpc_sni_hosts:
-            if preferred_grpc_sni and preferred_grpc_sni in profile.grpc_sni_hosts:
-                tls["serverName"] = preferred_grpc_sni
+            keep_sni = preferred_grpc_sni or (previous.grpc_sni if previous else None)
+            if keep_sni and keep_sni in profile.grpc_sni_hosts:
+                tls["serverName"] = keep_sni
             else:
                 tls["serverName"] = random.choice(profile.grpc_sni_hosts)
 
         grpc = inbound["streamSettings"]["grpcSettings"]
         if profile.grpc_service_names:
-            if preferred_grpc_service_name and preferred_grpc_service_name in profile.grpc_service_names:
-                grpc["serviceName"] = preferred_grpc_service_name
+            keep_svc = preferred_grpc_service_name or (previous.grpc_service_name if previous else None)
+            if not policy.rotate_service_name and keep_svc and keep_svc in profile.grpc_service_names:
+                grpc["serviceName"] = keep_svc
             else:
                 grpc["serviceName"] = random.choice(profile.grpc_service_names)
 
-        private_pem, cert_pem, fingerprint = _tls_material(previous, dns_names=[tls_name])
-        cert_dir = profile.cert_dir or Path("/usr/local/etc/xray/certs")
-        prefix = profile.cert_prefix or "grpc"
-        cert_file = str(cert_dir / f"{prefix}-cert.pem")
-        key_file = str(cert_dir / f"{prefix}-key.pem")
+        private_pem, cert_pem, fingerprint, extra = self._resolve_tls(
+            profile, previous, dns_names=[tls_name], rotate_tls=policy.rotate_tls, prefix="grpc",
+        )
+        cert_file, key_file, extra_files = extra
         inbound["streamSettings"]["tlsSettings"]["certificates"] = [
             {"certificateFile": cert_file, "keyFile": key_file},
         ]
@@ -342,7 +394,7 @@ class ProfileConfigBuilder:
             public_key=cert_pem,
             cert_fingerprint=fingerprint,
             client_id=client_id,
-            extra_files={"cert": cert_pem, "key": private_pem},
+            extra_files=extra_files,
         )
 
     def _build_xray_xhttp(
@@ -353,6 +405,7 @@ class ProfileConfigBuilder:
         previous: PreviousSecrets | None,
         exclude_ports: set[int] | None,
         preferred_port: int | None,
+        policy: RegeneratePolicy,
     ) -> BuildResult:
         inbound_tag = profile.inbound_tag
         port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
@@ -361,7 +414,7 @@ class ProfileConfigBuilder:
         if profile.listen_address:
             inbound["listen"] = profile.listen_address
 
-        if previous and previous.client_id:
+        if previous and previous.client_id and not policy.rotate_client_id:
             client_id = previous.client_id
         else:
             client_id = str(uuid.uuid4())
@@ -371,17 +424,17 @@ class ProfileConfigBuilder:
         stream["security"] = "tls"
         xhttp = stream["xhttpSettings"]
         tls_name = self._tls_server_name(profile)
-        # Host must match TLS SNI (foreign Host + self-signed SNI is a DPI marker).
         xhttp["host"] = tls_name
         xhttp["mode"] = "stream-up"
-        if profile.xhttp_paths:
+        if previous and previous.xhttp_path and not policy.rotate_path:
+            xhttp["path"] = previous.xhttp_path
+        elif profile.xhttp_paths:
             xhttp["path"] = random.choice(profile.xhttp_paths)
 
-        private_pem, cert_pem, fingerprint = _tls_material(previous, dns_names=[tls_name])
-        cert_dir = profile.cert_dir or Path("/usr/local/etc/xray/certs")
-        prefix = profile.cert_prefix or "xhttp"
-        cert_file = str(cert_dir / f"{prefix}-cert.pem")
-        key_file = str(cert_dir / f"{prefix}-key.pem")
+        private_pem, cert_pem, fingerprint, extra = self._resolve_tls(
+            profile, previous, dns_names=[tls_name], rotate_tls=policy.rotate_tls, prefix="xhttp",
+        )
+        cert_file, key_file, extra_files = extra
         stream["tlsSettings"] = {
             "serverName": tls_name,
             "alpn": ["h2", "http/1.1"],
@@ -397,7 +450,7 @@ class ProfileConfigBuilder:
             public_key=cert_pem,
             cert_fingerprint=fingerprint,
             client_id=client_id,
-            extra_files={"cert": cert_pem, "key": private_pem},
+            extra_files=extra_files,
         )
 
     def _build_hysteria2(
@@ -408,6 +461,7 @@ class ProfileConfigBuilder:
         previous: PreviousSecrets | None,
         exclude_ports: set[int] | None,
         preferred_port: int | None,
+        policy: RegeneratePolicy,
     ) -> BuildResult:
         from panel.infrastructure.vpn.hysteria2 import generate_auth_password
 
@@ -421,24 +475,26 @@ class ProfileConfigBuilder:
         ):
             preferred = profile.share_public_port
         port = pick_port(profile.port_candidates, exclude=blocked, udp=True, preferred=preferred)
-        if previous and previous.password:
+
+        if previous and previous.password and not policy.rotate_auth:
             password = previous.password
         else:
             password = generate_auth_password()
 
-        if previous and previous.obfs_password:
+        if previous and previous.obfs_password and not policy.rotate_obfs:
             obfs_password = previous.obfs_password
         else:
             obfs_password = generate_auth_password()
 
         tls_name = self._tls_server_name(profile)
-        private_pem, cert_pem, fingerprint = _tls_material(previous, dns_names=[tls_name])
-        cert_dir = profile.cert_dir or Path("/usr/local/etc/xray/certs")
-        prefix = profile.cert_prefix or "hysteria"
+        private_pem, cert_pem, fingerprint, extra = self._resolve_tls(
+            profile, previous, dns_names=[tls_name], rotate_tls=policy.rotate_tls, prefix="hysteria",
+        )
+        cert_file, key_file, extra_files = extra
         config["listen"] = f":{port}"
         config["auth"]["password"] = password
-        config["tls"]["cert"] = str(cert_dir / f"{prefix}-cert.pem")
-        config["tls"]["key"] = str(cert_dir / f"{prefix}-key.pem")
+        config["tls"]["cert"] = cert_file
+        config["tls"]["key"] = key_file
         config["tls"]["sni"] = tls_name
         config["obfs"] = {
             "type": "salamander",
@@ -451,7 +507,7 @@ class ProfileConfigBuilder:
             private_key=private_pem,
             public_key=cert_pem,
             cert_fingerprint=fingerprint,
-            extra_files={"cert": cert_pem, "key": private_pem},
+            extra_files=extra_files,
         )
 
     def _tls_server_name(self, profile: VpnProfileSettings | None = None) -> str:
@@ -465,12 +521,67 @@ class ProfileConfigBuilder:
                 return override
         return (self._settings.vpn.public_host or "").strip() or "localhost"
 
+    def _resolve_tls(
+        self,
+        profile: VpnProfileSettings,
+        previous: PreviousSecrets | None,
+        *,
+        dns_names: list[str],
+        rotate_tls: bool,
+        prefix: str,
+    ) -> tuple[str, str, str, tuple[str, str, dict[str, str]]]:
+        """Return private_pem, cert_pem, fingerprint, (cert_path, key_path, extra_files)."""
+        external = _load_external_tls(profile)
+        if external is not None:
+            private_pem, cert_pem, fingerprint, cert_path, key_path = external
+            return private_pem, cert_pem, fingerprint, (cert_path, key_path, {})
 
-def _tls_material(
+        cert_dir = profile.cert_dir or Path("/usr/local/etc/xray/certs")
+        file_prefix = profile.cert_prefix or prefix
+        cert_file = str(cert_dir / f"{file_prefix}-cert.pem")
+        key_file = str(cert_dir / f"{file_prefix}-key.pem")
+
+        if not rotate_tls:
+            reused = _try_reuse_tls(previous, dns_names=dns_names)
+            if reused is not None:
+                private_pem, cert_pem, fingerprint = reused
+                return private_pem, cert_pem, fingerprint, (
+                    cert_file,
+                    key_file,
+                    {"cert": cert_pem, "key": private_pem},
+                )
+
+        private_pem, cert_pem, fingerprint = generate_self_signed_cert(dns_names=dns_names)
+        return private_pem, cert_pem, fingerprint, (
+            cert_file,
+            key_file,
+            {"cert": cert_pem, "key": private_pem},
+        )
+
+
+def _load_external_tls(
+    profile: VpnProfileSettings,
+) -> tuple[str, str, str, str, str] | None:
+    """Load LE/external PEM pair. Returns private, cert, fingerprint, cert_path, key_path."""
+    if not profile.tls_cert_file or not profile.tls_key_file:
+        return None
+    cert_path = Path(profile.tls_cert_file)
+    key_path = Path(profile.tls_key_file)
+    if not cert_path.is_file() or not key_path.is_file():
+        return None
+    cert_pem = cert_path.read_text(encoding="utf-8")
+    private_pem = key_path.read_text(encoding="utf-8")
+    if not cert_matches_private_key(cert_pem, private_pem):
+        return None
+    fingerprint = cert_fingerprint_sha256(cert_pem)
+    return private_pem, cert_pem, fingerprint, str(cert_path), str(key_path)
+
+
+def _try_reuse_tls(
     previous: PreviousSecrets | None,
     *,
     dns_names: list[str],
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str] | None:
     primary = dns_names[0]
     if (
         previous
@@ -478,9 +589,10 @@ def _tls_material(
         and previous.public_key
         and previous.cert_fingerprint
         and cert_has_dns_san(previous.public_key, required_name=primary)
+        and cert_matches_private_key(previous.public_key, previous.private_key)
     ):
         return previous.private_key, previous.public_key, previous.cert_fingerprint
-    return generate_self_signed_cert(dns_names=dns_names)
+    return None
 
 
 def _apply_tls_cert_paths(
@@ -524,17 +636,43 @@ def previous_for_regenerate(
     cert_fingerprint: str = "",
 ) -> PreviousSecrets | None:
     client_id = None
+    short_ids = None
+    reality_dest = None
+    reality_server_names = None
+    xhttp_path = None
+    grpc_service_name = None
+    grpc_sni = None
+
     for inbound in config_data.get("inbounds", []):
         clients = inbound.get("settings", {}).get("clients", [])
-        if clients and clients[0].get("id"):
+        if clients and clients[0].get("id") and client_id is None:
             client_id = clients[0]["id"]
-            break
+        stream = inbound.get("streamSettings") or {}
+        reality = stream.get("realitySettings") or {}
+        if reality.get("shortIds"):
+            short_ids = list(reality["shortIds"])
+        if reality.get("dest"):
+            reality_dest = str(reality["dest"])
+        if reality.get("serverNames"):
+            reality_server_names = list(reality["serverNames"])
+        xhttp = stream.get("xhttpSettings") or {}
+        if xhttp.get("path"):
+            xhttp_path = str(xhttp["path"])
+        grpc = stream.get("grpcSettings") or {}
+        if grpc.get("serviceName"):
+            grpc_service_name = str(grpc["serviceName"])
+        tls = stream.get("tlsSettings") or {}
+        if tls.get("serverName"):
+            grpc_sni = str(tls["serverName"])
 
     if profile is ConfigProfile.XRAY_REALITY:
         return PreviousSecrets(
             client_id=client_id,
             private_key=private_key_plain,
             public_key=public_key,
+            short_ids=short_ids,
+            reality_dest=reality_dest,
+            reality_server_names=reality_server_names,
         )
     if profile is ConfigProfile.XRAY_GRPC:
         return PreviousSecrets(
@@ -542,6 +680,8 @@ def previous_for_regenerate(
             private_key=private_key_plain or None,
             public_key=public_key or None,
             cert_fingerprint=cert_fingerprint or None,
+            grpc_service_name=grpc_service_name,
+            grpc_sni=grpc_sni,
         )
     if profile is ConfigProfile.XRAY_XHTTP:
         return PreviousSecrets(
@@ -549,6 +689,7 @@ def previous_for_regenerate(
             private_key=private_key_plain or None,
             public_key=public_key or None,
             cert_fingerprint=cert_fingerprint or None,
+            xhttp_path=xhttp_path,
         )
     if profile is ConfigProfile.HYSTERIA2:
         password = (config_data.get("auth") or {}).get("password")

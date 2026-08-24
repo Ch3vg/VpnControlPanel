@@ -7,6 +7,7 @@ from typing import Any
 import structlog
 
 from panel.domain.value_objects.config_profile import ConfigProfile
+from panel.domain.value_objects.regenerate_policy import RegeneratePolicy
 from panel.infrastructure.crypto.config_data import decrypt_config_data_fields, encrypt_config_data_fields
 from panel.infrastructure.persistence.repositories.vpn_config import VpnConfigRepository
 from panel.infrastructure.vpn.config_builder import ProfileConfigBuilder, listening_port, previous_for_regenerate
@@ -31,6 +32,13 @@ async def build_and_persist_version(
     snapshot = None
     config_plain: dict[str, Any] | None = None
     profile_settings = ctx.settings.vpn.profiles[profile.value]
+    policy_raw = await repo.get_regenerate_policy_raw(config_id)
+    policy = RegeneratePolicy.from_stored(
+        policy_raw,
+        profile=profile,
+        profile_settings=profile_settings,
+    )
+
     if target_version > 1:
         snapshot = await repo.get_version_snapshot(config_id, target_version - 1)
         if snapshot is not None:
@@ -69,9 +77,12 @@ async def build_and_persist_version(
                 break
 
     used_ports = set(await repo.list_used_ports(exclude_config_id=config_id))
-    # Regenerate always picks a new free port; exclude the previous one so it changes.
+    preferred_port: int | None = None
     if previous_port is not None:
-        used_ports.add(previous_port)
+        if policy.rotate_port:
+            used_ports.add(previous_port)
+        else:
+            preferred_port = previous_port
 
     if target_version > 1 and ctx.settings.systemd.per_config:
         await asyncio.to_thread(
@@ -85,9 +96,10 @@ async def build_and_persist_version(
         name=name,
         previous=previous,
         exclude_ports=used_ports,
-        preferred_port=None,
+        preferred_port=preferred_port,
         preferred_grpc_sni=preferred_grpc_sni,
         preferred_grpc_service_name=preferred_grpc_service_name,
+        policy=policy,
     )
     result.port = listening_port(profile, result.config_data, profile_settings)
     await asyncio.to_thread(

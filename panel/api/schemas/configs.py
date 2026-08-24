@@ -41,6 +41,7 @@ class CreateConfigRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     protocol: VpnProtocolType
     profile: ConfigProfile | None = None
+    regenerate_policy: dict[str, bool] | None = None
 
     @model_validator(mode="after")
     def default_profile(self) -> CreateConfigRequest:
@@ -108,6 +109,7 @@ class ConfigDetailResponse(BaseModel):
     id: str
     name: str
     protocol: VpnProtocolType
+    profile: ConfigProfile
     status: ConfigStatus
     current_version: int | None
     last_task_id: str | None
@@ -118,6 +120,7 @@ class ConfigDetailResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     current_version_detail: ConfigVersionResponse | None = None
+    regenerate_policy: dict[str, bool] | None = None
 
 
 def _version_response(version: VpnConfigVersion) -> ConfigVersionResponse:
@@ -150,10 +153,12 @@ def config_to_detail(config: VpnConfig) -> ConfigDetailResponse:
         if config.current_version_detail is not None
         else None
     )
+    policy = config.regenerate_policy.to_stored() if config.regenerate_policy is not None else None
     return ConfigDetailResponse(
         id=str(config.id),
         name=config.name,
         protocol=config.protocol,
+        profile=config.profile,
         status=config.status,
         current_version=config.current_version,
         last_task_id=config.last_task_id,
@@ -164,4 +169,5 @@ def config_to_detail(config: VpnConfig) -> ConfigDetailResponse:
         created_at=config.created_at,
         updated_at=config.updated_at,
         current_version_detail=version_detail,
+        regenerate_policy=policy,
     )

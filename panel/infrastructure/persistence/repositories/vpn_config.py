@@ -11,6 +11,7 @@ from panel.domain.entities.vpn_config import VpnConfig, VpnConfigVersion
 from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.domain.value_objects.config_status import ConfigStatus
 from panel.domain.value_objects.protocol import VpnProtocolType
+from panel.domain.value_objects.regenerate_policy import RegeneratePolicy
 from panel.infrastructure.persistence.models import VpnConfigModel, VpnConfigVersionModel
 
 
@@ -30,6 +31,12 @@ def _version_to_entity(model: VpnConfigVersionModel) -> VpnConfigVersion:
         cert_fingerprint=model.cert_fingerprint,
         created_at=model.created_at,
     )
+
+
+def _policy_from_model(model: VpnConfigModel) -> RegeneratePolicy | None:
+    if model.regenerate_policy is None:
+        return None
+    return RegeneratePolicy.model_validate(model.regenerate_policy)
 
 
 def _config_to_entity(
@@ -53,6 +60,7 @@ def _config_to_entity(
         created_at=model.created_at,
         updated_at=model.updated_at,
         current_version_detail=version_detail,
+        regenerate_policy=_policy_from_model(model),
     )
 
 
@@ -134,6 +142,7 @@ class VpnConfigRepository:
         protocol: VpnProtocolType,
         profile: ConfigProfile,
         created_by: uuid.UUID,
+        regenerate_policy: RegeneratePolicy | None = None,
     ) -> VpnConfig:
         model = VpnConfigModel(
             name=name,
@@ -141,6 +150,7 @@ class VpnConfigRepository:
             profile=profile.value,
             status=ConfigStatus.PENDING.value,
             current_version=None,
+            regenerate_policy=regenerate_policy.to_stored() if regenerate_policy is not None else None,
             is_active=True,
             created_by=created_by,
             updated_by=created_by,
@@ -275,6 +285,12 @@ class VpnConfigRepository:
             model.name,
             model.current_version + 1,
         )
+
+    async def get_regenerate_policy_raw(self, config_id: uuid.UUID) -> dict | None:
+        model = await self._get_model(config_id, active_only=False)
+        if model is None:
+            raise ValueError(f"Config not found: {config_id}")
+        return dict(model.regenerate_policy) if model.regenerate_policy is not None else None
 
     async def get_version_snapshot(
         self,

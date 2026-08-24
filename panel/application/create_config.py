@@ -10,6 +10,7 @@ from panel.domain.entities.user import User
 from panel.domain.ports.broker import BrokerPort
 from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.domain.value_objects.protocol import VpnProtocolType
+from panel.domain.value_objects.regenerate_policy import RegeneratePolicy
 from panel.application.audit_service import AuditService
 from panel.infrastructure.persistence.repositories.vpn_config import VpnConfigRepository
 
@@ -41,14 +42,25 @@ class CreateConfigUseCase:
         protocol: VpnProtocolType,
         profile: ConfigProfile,
         user: User,
+        regenerate_policy: RegeneratePolicy | dict | None = None,
     ) -> CreateConfigResult:
         if profile.value not in self._settings.vpn.profiles:
             raise ValueError(f"Unknown profile: {profile.value}")
+        profile_settings = self._settings.vpn.profiles[profile.value]
+        base = RegeneratePolicy.for_profile(profile, profile_settings)
+        if regenerate_policy is None:
+            policy = base
+        elif isinstance(regenerate_policy, RegeneratePolicy):
+            # Partial API payloads still fill pydantic defaults; merge onto profile defaults.
+            policy = base.model_copy(update=regenerate_policy.model_dump())
+        else:
+            policy = base.model_copy(update=dict(regenerate_policy))
         config = await self._configs.create_pending(
             name=name,
             protocol=protocol,
             profile=profile,
             created_by=user.id,
+            regenerate_policy=policy,
         )
         await self._session.commit()
 

@@ -150,6 +150,10 @@ class VpnProfileSettings(BaseModel):
     # When share_public_port + listen_address are set, regenerate rewrites this stream mux.
     nginx_stream_conf: Path | None = None
     nginx_panel_backend: str | None = None
+    # External TLS material (e.g. Let's Encrypt). When both set and readable, builder
+    # uses these paths and does not write self-signed certs on regenerate.
+    tls_cert_file: Path | None = None
+    tls_key_file: Path | None = None
 
 
 class VpnServiceSettings(BaseModel):

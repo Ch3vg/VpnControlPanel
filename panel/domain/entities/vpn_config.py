@@ -7,6 +7,7 @@ from datetime import datetime
 from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.domain.value_objects.config_status import ConfigStatus
 from panel.domain.value_objects.protocol import VpnProtocolType
+from panel.domain.value_objects.regenerate_policy import RegeneratePolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,3 +37,4 @@ class VpnConfig:
     created_at: datetime
     updated_at: datetime
     current_version_detail: VpnConfigVersion | None = None
+    regenerate_policy: RegeneratePolicy | None = None

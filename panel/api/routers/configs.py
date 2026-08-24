@@ -104,7 +104,14 @@ async def create_config(
             broker,
             make_audit_service(settings, session),
         )
-        result = await use_case.execute(body.name, body.protocol, body.profile, user)
+        policy_overrides = body.regenerate_policy
+        result = await use_case.execute(
+            body.name,
+            body.protocol,
+            body.profile,  # type: ignore[arg-type]
+            user,
+            regenerate_policy=policy_overrides,
+        )
     finally:
         await broker.close()
     return CreateConfigResponse(task_id=result.task_id, config_id=str(result.config_id))
