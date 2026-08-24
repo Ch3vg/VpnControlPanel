@@ -1,4 +1,5 @@
 import { ApiError, api } from "./api.js";
+import { createConfigEditor } from "./lib/config-editor.bundle.js";
 
 const PROFILES = {
   xray: [
@@ -1029,12 +1030,16 @@ function renderConfigDetailContent(config, status) {
         <div class="toolbar">
           <h2 class="card-title" style="margin:0">Конфигурация</h2>
           <div class="btn-row">
-            <button type="button" class="secondary" id="config-editor-load">Загрузить</button>
+            <span id="config-editor-format" class="muted"></span>
+            <button type="button" class="secondary" id="config-editor-load">Перезагрузить</button>
             <button type="button" id="config-editor-save" disabled>Сохранить</button>
           </div>
         </div>
-        <p class="muted" style="margin:0.5rem 0 0.75rem">Текущий config_data (JSON). Сохранение перезапишет live-файлы и перезапустит сервис.</p>
-        <textarea id="config-editor" class="config-editor" spellcheck="false" placeholder="Нажмите «Загрузить»…"></textarea>
+        <p class="muted" style="margin:0.5rem 0 0.75rem">
+          Редактор с подсветкой и проверкой синтаксиса.
+          Xray — JSON, Hysteria2 — YAML. Сохранение перезапишет live-файлы.
+        </p>
+        <div id="config-editor-host" class="config-editor-host"></div>
         <div id="config-editor-status" class="muted" style="margin-top:0.5rem"></div>
       </section>
     `
@@ -1124,56 +1129,71 @@ async function handleSavePolicy(configId) {
 }
 
 function bindConfigEditor(configId) {
-  const editor = document.getElementById("config-editor");
+  const host = document.getElementById("config-editor-host");
   const loadBtn = document.getElementById("config-editor-load");
   const saveBtn = document.getElementById("config-editor-save");
   const statusEl = document.getElementById("config-editor-status");
-  if (!editor || !loadBtn || !saveBtn) return;
+  const formatEl = document.getElementById("config-editor-format");
+  if (!host || !loadBtn || !saveBtn) return;
 
+  let editor = null;
   let loaded = false;
+  let currentFormat = "json";
 
-  loadBtn.addEventListener("click", async () => {
+  async function loadEditor() {
     loadBtn.disabled = true;
     statusEl.textContent = "Загрузка…";
     try {
       const result = await api.getConfigData(configId);
-      editor.value = JSON.stringify(result.config_data, null, 2);
+      currentFormat = result.format === "yaml" ? "yaml" : "json";
+      if (formatEl) {
+        formatEl.textContent = currentFormat.toUpperCase();
+      }
+      if (editor) {
+        editor.destroy();
+        editor = null;
+        host.innerHTML = "";
+      }
+      editor = createConfigEditor(host, {
+        format: currentFormat,
+        doc: result.content || "",
+      });
       loaded = true;
       saveBtn.disabled = false;
       statusEl.textContent = `Версия ${result.version} · ${result.profile}`;
+      editor.focus();
     } catch (error) {
       statusEl.textContent = "";
       showToast(errorMessage(error), "error");
     } finally {
       loadBtn.disabled = false;
     }
+  }
+
+  loadBtn.addEventListener("click", () => {
+    loadEditor();
   });
 
   saveBtn.addEventListener("click", async () => {
-    if (!loaded) {
+    if (!loaded || !editor) {
       showToast("Сначала загрузите конфигурацию", "error");
       return;
     }
-    let parsed;
-    try {
-      parsed = JSON.parse(editor.value);
-    } catch (error) {
-      showToast(`Некорректный JSON: ${errorMessage(error)}`, "error");
-      return;
-    }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      showToast("Корень JSON должен быть объектом", "error");
+    if (editor.hasLintErrors()) {
+      showToast("Исправьте ошибки синтаксиса перед сохранением", "error");
       return;
     }
     if (!confirm("Сохранить конфигурацию и перезаписать live-файлы?")) return;
     saveBtn.disabled = true;
     statusEl.textContent = "Сохранение…";
     try {
-      const result = await api.updateConfigData(configId, parsed);
-      editor.value = JSON.stringify(result.config_data, null, 2);
+      const result = await api.updateConfigData(configId, {
+        content: editor.getValue(),
+        format: currentFormat,
+      });
+      editor.setValue(result.content || "");
       statusEl.textContent = `Сохранено · версия ${result.version}`;
       showToast("Конфигурация сохранена", "success");
-      await loadConfigDetail(configId);
     } catch (error) {
       statusEl.textContent = "";
       showToast(errorMessage(error), "error");
@@ -1181,6 +1201,8 @@ function bindConfigEditor(configId) {
       saveBtn.disabled = false;
     }
   });
+
+  loadEditor();
 }
 
 async function handleRegenerate(configId) {

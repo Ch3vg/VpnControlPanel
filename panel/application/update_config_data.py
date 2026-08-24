@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
+
+import yaml
 
 from panel.application.audit_service import AuditService
 from panel.application.configs import ConfigNotFound
 from panel.config import PanelSettings
 from panel.domain.entities.user import User
+from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.domain.value_objects.config_status import ConfigStatus
 from panel.infrastructure.crypto import FieldEncryptor
 from panel.infrastructure.crypto.config_data import decrypt_config_data_fields, encrypt_config_data_fields
@@ -24,11 +28,42 @@ class InvalidConfigData(Exception):
     pass
 
 
+ConfigFormat = Literal["json", "yaml"]
+
+
+def format_for_profile(profile: ConfigProfile) -> ConfigFormat:
+    return "yaml" if profile is ConfigProfile.HYSTERIA2 else "json"
+
+
+def serialize_config_data(config_data: dict[str, Any], fmt: ConfigFormat) -> str:
+    if fmt == "yaml":
+        return yaml.safe_dump(config_data, sort_keys=False, allow_unicode=True)
+    return json.dumps(config_data, indent=2, ensure_ascii=False)
+
+
+def parse_config_content(content: str, fmt: ConfigFormat) -> dict[str, Any]:
+    text = (content or "").strip()
+    if not text:
+        raise InvalidConfigData("Empty document")
+    try:
+        if fmt == "yaml":
+            data = yaml.safe_load(text)
+        else:
+            data = json.loads(text)
+    except Exception as exc:
+        raise InvalidConfigData(f"Syntax error: {exc}") from exc
+    if not isinstance(data, dict) or not data:
+        raise InvalidConfigData("Root must be a non-empty object")
+    return data
+
+
 @dataclass(frozen=True, slots=True)
 class ConfigDataResult:
     config_id: uuid.UUID
     version: int
     profile: str
+    format: ConfigFormat
+    content: str
     config_data: dict[str, Any]
 
 
@@ -56,10 +91,13 @@ class GetConfigDataUseCase:
             builder.sensitive_fields(snapshot.profile),
             self._encryptor,
         )
+        fmt = format_for_profile(snapshot.profile)
         return ConfigDataResult(
             config_id=config_id,
             version=snapshot.version,
             profile=snapshot.profile.value,
+            format=fmt,
+            content=serialize_config_data(plain, fmt),
             config_data=plain,
         )
 
@@ -81,11 +119,11 @@ class UpdateConfigDataUseCase:
         self,
         config_id: uuid.UUID,
         user: User,
-        config_data: dict[str, Any],
+        *,
+        config_data: dict[str, Any] | None = None,
+        content: str | None = None,
+        format: ConfigFormat | None = None,
     ) -> ConfigDataResult:
-        if not isinstance(config_data, dict) or not config_data:
-            raise InvalidConfigData("config_data must be a non-empty object")
-
         config = await self._configs.get_by_id(config_id)
         if config is None or config.current_version is None:
             raise ConfigNotFound
@@ -101,14 +139,22 @@ class UpdateConfigDataUseCase:
             raise InvalidConfigData(f"Unknown profile: {profile.value}")
         profile_settings = self._settings.vpn.profiles[profile.value]
         builder = ProfileConfigBuilder(self._settings)
+        fmt = format or format_for_profile(profile)
+
+        if content is not None:
+            parsed = parse_config_content(content, fmt)
+        elif isinstance(config_data, dict) and config_data:
+            parsed = config_data
+        else:
+            raise InvalidConfigData("Provide content or config_data object")
 
         try:
-            port = listening_port(profile, config_data, profile_settings)
+            port = listening_port(profile, parsed, profile_settings)
         except Exception:
             port = snapshot.port
 
         stored = encrypt_config_data_fields(
-            config_data,
+            parsed,
             builder.sensitive_fields(profile),
             self._encryptor,
         )
@@ -121,7 +167,7 @@ class UpdateConfigDataUseCase:
         )
 
         result = BuildResult(
-            config_data=config_data,
+            config_data=parsed,
             port=port,
             private_key="",
             public_key=snapshot.public_key,
@@ -142,6 +188,7 @@ class UpdateConfigDataUseCase:
                 "config_id": str(config_id),
                 "version": snapshot.version,
                 "port": port,
+                "format": fmt,
             },
             user_id=user.id,
         )
@@ -149,5 +196,7 @@ class UpdateConfigDataUseCase:
             config_id=config_id,
             version=snapshot.version,
             profile=profile.value,
-            config_data=config_data,
+            format=fmt,
+            content=serialize_config_data(parsed, fmt),
+            config_data=parsed,
         )

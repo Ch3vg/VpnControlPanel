@@ -419,6 +419,14 @@ button.link-btn.danger:hover,
   display: none !important;
 }
 
+.config-editor-host {
+  min-height: 320px;
+}
+
+.config-editor-host .cm-editor {
+  background: #0f1419;
+}
+
 .config-editor {
   width: 100%;
   min-height: 280px;

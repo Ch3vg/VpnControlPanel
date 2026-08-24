@@ -34,3 +34,7 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Config editor build deps
+panel/web/static/js/cm6-src/node_modules/
+

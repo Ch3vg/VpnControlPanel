@@ -67,11 +67,23 @@ class ConfigDataResponse(BaseModel):
     config_id: str
     version: int
     profile: str
+    format: str
+    content: str
     config_data: dict
 
 
 class UpdateConfigDataRequest(BaseModel):
-    config_data: dict
+    content: str | None = None
+    format: str | None = None
+    config_data: dict | None = None
+
+    @model_validator(mode="after")
+    def require_payload(self) -> UpdateConfigDataRequest:
+        if self.content is None and self.config_data is None:
+            raise ValueError("Provide content or config_data")
+        if self.format is not None and self.format not in {"json", "yaml"}:
+            raise ValueError("format must be json or yaml")
+        return self
 
 
 class RegenerateConfigResponse(BaseModel):

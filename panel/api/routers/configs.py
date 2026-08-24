@@ -292,6 +292,8 @@ async def get_config_data(
         config_id=str(result.config_id),
         version=result.version,
         profile=result.profile,
+        format=result.format,
+        content=result.content,
         config_data=result.config_data,
     )
 
@@ -311,7 +313,13 @@ async def update_config_data(
         make_audit_service(settings, session),
     )
     try:
-        result = await use_case.execute(config_id, user, body.config_data)
+        result = await use_case.execute(
+            config_id,
+            user,
+            config_data=body.config_data,
+            content=body.content,
+            format=body.format,  # type: ignore[arg-type]
+        )
     except ConfigNotFound:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found") from None
     except ConfigDataUnavailable as exc:
@@ -323,6 +331,8 @@ async def update_config_data(
         config_id=str(result.config_id),
         version=result.version,
         profile=result.profile,
+        format=result.format,
+        content=result.content,
         config_data=result.config_data,
     )
 
