@@ -25,7 +25,7 @@ def is_tcp_port_open(port: int, *, host: str = "127.0.0.1", timeout: float = 0.5
         return sock.connect_ex((host, port)) == 0
 
 
-def _service_name_for_config(
+def service_name_for_config(
     config_id: uuid.UUID,
     profile: ConfigProfile,
     settings: PanelSettings,
@@ -36,6 +36,10 @@ def _service_name_for_config(
     if profile_settings is None:
         return None
     return profile_settings.service_name
+
+
+# Back-compat alias for internal callers.
+_service_name_for_config = service_name_for_config
 
 
 def probe_config_runtime(

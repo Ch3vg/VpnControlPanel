@@ -120,6 +120,14 @@ class ConfigStatusResponse(BaseModel):
     runtime_detail: str | None = None
 
 
+class ConfigLogsResponse(BaseModel):
+    config_id: str
+    service_name: str | None = None
+    lines: int
+    content: str
+    available: bool
+
+
 class ConfigRuntimeItemResponse(BaseModel):
     config_id: str
     online: bool | None

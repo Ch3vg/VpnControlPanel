@@ -12,6 +12,10 @@
 
 В UI (Обзор → Шаблоны) и API `GET/PUT /api/v1/templates` можно править файлы шаблонов (`configs/config_*.json`, `hysteria.server.yaml`). Изменения влияют на новые create/regenerate, не на уже развёрнутые конфиги до regenerate.
 
+### Логи конфига в UI
+
+На странице конфига — хвост journald unit `vpn-{id}` через polling `GET /api/v1/configs/{id}/logs` (`vpn-systemctl logs`).
+
 ## Идеи (бэклог)
 
 - Массовый PATCH `regenerate_policy` у уже созданных конфигов

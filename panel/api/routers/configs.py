@@ -10,6 +10,7 @@ from panel.api.schemas.configs import (
     ConfigDataResponse,
     ConfigDetailResponse,
     ConfigListResponse,
+    ConfigLogsResponse,
     ConfigRuntimeListResponse,
     ConfigRuntimeItemResponse,
     ConfigStatusResponse,
@@ -45,6 +46,7 @@ from panel.application.create_share_link import (
     CreateShareLinkUseCase,
 )
 from panel.application.share_expiration import InvalidShareRequest
+from panel.application.get_config_logs import GetConfigLogsUseCase
 from panel.application.get_config_runtime import GetConfigsRuntimeUseCase
 from panel.application.get_config_status import GetConfigStatusUseCase
 from panel.application.regenerate_config import ConfigNotRegeneratable, RegenerateConfigUseCase
@@ -267,6 +269,28 @@ async def get_config_status(
         runtime_systemd_active=result.runtime_systemd_active,
         runtime_port_listening=result.runtime_port_listening,
         runtime_detail=result.runtime_detail,
+    )
+
+
+@router.get("/{config_id}/logs", response_model=ConfigLogsResponse)
+async def get_config_logs(
+    config_id: uuid.UUID,
+    _user: CurrentUserDep,
+    settings: SettingsDep,
+    session: AsyncSession = Depends(get_db_session),
+    lines: int = Query(default=100, ge=1, le=500),
+) -> ConfigLogsResponse:
+    use_case = GetConfigLogsUseCase(VpnConfigRepository(session), settings)
+    try:
+        result = await use_case.execute(config_id, lines=lines)
+    except ConfigNotFound:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found") from None
+    return ConfigLogsResponse(
+        config_id=str(result.config_id),
+        service_name=result.service_name,
+        lines=result.lines,
+        content=result.content,
+        available=result.available,
     )
 
 

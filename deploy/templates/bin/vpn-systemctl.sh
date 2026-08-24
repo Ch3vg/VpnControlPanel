@@ -62,6 +62,20 @@ case "${ACTION}" in
     journalctl -u "${SERVICE}" -n 20 --no-pager >&2 || true
     exit 1
     ;;
+  logs)
+    if [[ -z "${SERVICE}" || "${SERVICE}" != "${PREFIX}"* ]]; then
+      echo "Service name must start with ${PREFIX}" >&2
+      exit 1
+    fi
+    LINES="${3:-${VPN_JOURNAL_LINES:-100}}"
+    if ! [[ "${LINES}" =~ ^[0-9]+$ ]] || (( LINES < 1 )); then
+      LINES=100
+    fi
+    if (( LINES > 500 )); then
+      LINES=500
+    fi
+    exec journalctl -u "${SERVICE}" -n "${LINES}" --no-pager -o short-iso
+    ;;
   enable|disable|restart|stop|start)
     if [[ -z "${SERVICE}" || "${SERVICE}" != "${PREFIX}"* ]]; then
       echo "Service name must start with ${PREFIX}" >&2

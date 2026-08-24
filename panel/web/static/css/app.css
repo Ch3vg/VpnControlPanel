@@ -423,6 +423,22 @@ button.link-btn.danger:hover,
   min-height: 320px;
 }
 
+.config-logs-pre {
+  margin: 0.75rem 0 0;
+  max-height: 360px;
+  overflow: auto;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: #0f1419;
+  border: 1px solid var(--border, #2a323c);
+  color: #d7dee8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .config-editor-host .cm-editor {
   background: #0f1419;
 }

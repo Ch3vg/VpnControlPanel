@@ -174,6 +174,7 @@ const toastEl = document.getElementById("toast");
 let pollTimer = null;
 let resourcesPollTimer = null;
 let runtimePollTimer = null;
+let logsPollTimer = null;
 let toastTimer = null;
 let runtimeById = {};
 
@@ -245,6 +246,14 @@ function stopPolling() {
   if (runtimePollTimer) {
     clearInterval(runtimePollTimer);
     runtimePollTimer = null;
+  }
+  stopLogsPolling();
+}
+
+function stopLogsPolling() {
+  if (logsPollTimer) {
+    clearInterval(logsPollTimer);
+    logsPollTimer = null;
   }
 }
 
@@ -1222,6 +1231,21 @@ function renderConfigDetailContent(config, status) {
       </div>
     </section>
 
+    <section class="card" id="config-logs-card">
+      <div class="toolbar">
+        <h2 class="card-title" style="margin:0">Логи сервиса</h2>
+        <div class="btn-row">
+          <label class="policy-check" style="margin:0">
+            <input type="checkbox" id="config-logs-auto" checked>
+            <span>Автообновление</span>
+          </label>
+          <button type="button" class="secondary" id="config-logs-refresh">Обновить</button>
+        </div>
+      </div>
+      <div id="config-logs-meta" class="muted" style="margin-top:0.5rem"></div>
+      <pre id="config-logs-pre" class="config-logs-pre">Загрузка…</pre>
+    </section>
+
     ${
       version
         ? `
@@ -1309,6 +1333,7 @@ function renderConfigDetailContent(config, status) {
   );
   bindPublicKeyDownload(bodyEl);
   bindConfigEditor(config.id);
+  bindConfigLogs(config.id);
   bindShareTtlSelect("share-ttl");
   document.getElementById("share-secure-btn")?.addEventListener("click", () =>
     handleShare(config.id, true),
@@ -1337,6 +1362,49 @@ async function handleSavePolicy(configId) {
   } finally {
     if (button) button.disabled = false;
   }
+}
+
+function bindConfigLogs(configId) {
+  stopLogsPolling();
+  const pre = document.getElementById("config-logs-pre");
+  const meta = document.getElementById("config-logs-meta");
+  const refreshBtn = document.getElementById("config-logs-refresh");
+  const autoEl = document.getElementById("config-logs-auto");
+  if (!pre) return;
+
+  async function load() {
+    try {
+      const result = await api.getConfigLogs(configId, { lines: 200 });
+      const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
+      pre.textContent = result.content || "";
+      if (atBottom) pre.scrollTop = pre.scrollHeight;
+      if (meta) {
+        const unit = result.service_name ? `unit ${result.service_name}` : "unit неизвестен";
+        const state = result.available ? "ok" : "ошибка чтения";
+        meta.textContent = `${unit} · последние ${result.lines} строк · ${state}`;
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        api.clearToken();
+        navigate("/login");
+        return;
+      }
+      pre.textContent = errorMessage(error);
+      if (meta) meta.textContent = "";
+    }
+  }
+
+  function syncAuto() {
+    stopLogsPolling();
+    if (autoEl?.checked) {
+      logsPollTimer = setInterval(load, 5000);
+    }
+  }
+
+  refreshBtn?.addEventListener("click", () => load());
+  autoEl?.addEventListener("change", syncAuto);
+  load();
+  syncAuto();
 }
 
 function bindConfigEditor(configId) {

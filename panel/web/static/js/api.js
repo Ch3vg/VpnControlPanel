@@ -83,6 +83,13 @@ export class ApiClient {
     return this.request("GET", `/api/v1/configs/${id}/status`);
   }
 
+  getConfigLogs(id, params = {}) {
+    const query = new URLSearchParams();
+    if (params.lines != null) query.set("lines", String(params.lines));
+    const suffix = query.toString() ? `?${query}` : "";
+    return this.request("GET", `/api/v1/configs/${id}/logs${suffix}`);
+  }
+
   getConfigData(id) {
     return this.request("GET", `/api/v1/configs/${id}/config-data`);
   }
