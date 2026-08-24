@@ -215,25 +215,15 @@ class ProfileConfigBuilder:
             reload_service(profile_settings.service_name)
             wait_for_service_ready(profile_settings.service_name, profile, systemd)
 
-        if profile is ConfigProfile.XRAY_REALITY:
+        if profile in {
+            ConfigProfile.XRAY_REALITY,
+            ConfigProfile.XRAY_XHTTP,
+            ConfigProfile.XRAY_GRPC,
+        }:
             from panel.infrastructure.vpn.nginx_shared_443 import sync_reality_shared_443
 
+            # Inject just-written config; sync scans other mux profiles from live dirs.
             sync_reality_shared_443(self._settings, result.config_data)
-        elif profile in {ConfigProfile.XRAY_XHTTP, ConfigProfile.XRAY_GRPC}:
-            from panel.infrastructure.vpn.nginx_shared_443 import (
-                _load_live_configs_for_profile,
-                sync_reality_shared_443,
-            )
-
-            # Refresh mux so per-config share hosts stay current alongside Reality.
-            reality_live = None
-            try:
-                lives = _load_live_configs_for_profile(self._settings, ConfigProfile.XRAY_REALITY.value)
-                reality_live = lives[0] if lives else None
-            except Exception:
-                reality_live = None
-            if reality_live is not None:
-                sync_reality_shared_443(self._settings, reality_live)
 
     def sensitive_fields(self, profile: ConfigProfile) -> list[str]:
         if profile is ConfigProfile.HYSTERIA2:

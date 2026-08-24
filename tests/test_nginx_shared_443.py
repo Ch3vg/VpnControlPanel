@@ -46,6 +46,22 @@ def test_render_shared_443_stream_conf() -> None:
     assert "ssl_preread on;" in text
 
 
+def test_render_shared_443_dedupes_duplicate_sni_last_wins() -> None:
+    text = render_shared_443_stream_conf(
+        panel_snis=["panel.example.com"],
+        panel_backend="127.0.0.1:8443",
+        routes=[
+            ("learn.example.com", "127.0.0.1:8080"),
+            ("learn.example.com", "127.0.0.1:8888"),
+            ("foo.example.com", "127.0.0.1:2096"),
+        ],
+    )
+    assert text.count("learn.example.com") == 1
+    assert "learn.example.com 127.0.0.1:8888;" in text
+    assert "learn.example.com 127.0.0.1:8080;" not in text
+    assert "foo.example.com 127.0.0.1:2096;" in text
+
+
 def test_panel_sni_hosts_includes_aliases(panel_settings) -> None:
     panel_settings.vpn.public_host = "learn.example.com"
     panel_settings.vpn.public_host_aliases = ["old.example.com", "learn.example.com", ""]

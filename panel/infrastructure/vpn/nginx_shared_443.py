@@ -69,18 +69,32 @@ def render_shared_443_stream_conf(
     panel_backend: str,
     routes: list[tuple[str, str]],
 ) -> str:
-    """routes: (sni, backend) for non-panel traffic (Reality, xHTTP, …)."""
+    """routes: (sni, backend) for non-panel traffic (Reality, xHTTP, …).
+
+    Duplicate SNIs are collapsed (last wins) — nginx map rejects conflicting keys.
+    """
     panel_set = {s.strip() for s in panel_snis if s.strip()}
     lines: list[str] = []
     for sni in panel_snis:
         sni = sni.strip()
         if sni:
             lines.append(f"    {sni} {panel_backend};")
+    by_sni: dict[str, str] = {}
     for sni, backend in routes:
         sni = sni.strip()
         backend = backend.strip()
         if not sni or not backend or sni in panel_set:
             continue
+        prev = by_sni.get(sni)
+        if prev is not None and prev != backend:
+            logger.warning(
+                "shared-443 duplicate SNI %s: keeping %s, dropping %s",
+                sni,
+                backend,
+                prev,
+            )
+        by_sni[sni] = backend
+    for sni, backend in by_sni.items():
         lines.append(f"    {sni} {backend};")
     map_body = "\n".join(lines) if lines else f"    default {panel_backend};"
     return (
@@ -169,6 +183,21 @@ def _tls_host_from_config(profile_key: str, data: dict[str, Any], profile: VpnPr
     return host or None
 
 
+def _detect_mux_profile_key(settings: PanelSettings, config_data: dict[str, Any]) -> str | None:
+    """Return mux profile key whose inbound_tag is present in config_data."""
+    for key in _MUX_PROFILES:
+        profile = settings.vpn.profiles.get(key)
+        tag = (profile.inbound_tag if profile is not None else None) or ""
+        if not tag:
+            continue
+        try:
+            find_inbound(config_data, tag)
+            return key
+        except Exception:
+            continue
+    return None
+
+
 def _routes_for_mux_profile(
     settings: PanelSettings,
     profile_key: str,
@@ -191,12 +220,13 @@ def _routes_for_mux_profile(
             return []
         return [(sni, backend) for sni in reality_sni_hosts(profile, data)]
 
-    routes: list[tuple[str, str]] = []
     live_items = _load_live_configs_for_profile(settings, profile_key)
     if config_data is not None:
-        # Ensure the just-written config is included even before disk scan races.
-        live_items = [config_data, *[item for item in live_items if item is not config_data]]
+        # Append last so this config wins SNI collisions after dedupe.
+        live_items = [*live_items, config_data]
 
+    # host -> backend (last wins). Same SNI cannot map to two backends in nginx.
+    by_host: dict[str, str] = {}
     seen_backends: set[str] = set()
     for data in live_items:
         try:
@@ -211,9 +241,18 @@ def _routes_for_mux_profile(
             host = (profile.share_public_host or settings.vpn.public_host or "").strip()
         if not host:
             continue
-        routes.append((host, backend))
+        prev = by_host.get(host)
+        if prev is not None and prev != backend:
+            logger.warning(
+                "shared-443 profile %s: SNI %s backend %s replaces %s",
+                profile_key,
+                host,
+                backend,
+                prev,
+            )
+        by_host[host] = backend
         seen_backends.add(backend)
-    return routes
+    return list(by_host.items())
 
 
 def sync_reality_shared_443(settings: PanelSettings, config_data: dict[str, Any]) -> None:
@@ -228,13 +267,12 @@ def sync_reality_shared_443(settings: PanelSettings, config_data: dict[str, Any]
         return
 
     panel_backend = (reality.nginx_panel_backend or DEFAULT_PANEL_BACKEND).strip()
+    owner = _detect_mux_profile_key(settings, config_data)
     routes: list[tuple[str, str]] = []
-    routes.extend(_routes_for_mux_profile(settings, ConfigProfile.XRAY_REALITY.value, config_data))
     for key in _MUX_PROFILES:
-        if key == ConfigProfile.XRAY_REALITY.value:
-            continue
-        # Pass None so all live xHTTP/gRPC configs are scanned (multi-config hosts).
-        routes.extend(_routes_for_mux_profile(settings, key, None))
+        # Inject only into the matching profile; other profiles scan live on disk.
+        injected = config_data if key == owner else None
+        routes.extend(_routes_for_mux_profile(settings, key, injected))
 
     conf = render_shared_443_stream_conf(
         panel_snis=panel_snis,
@@ -245,8 +283,9 @@ def sync_reality_shared_443(settings: PanelSettings, config_data: dict[str, Any]
     run_systemctl("write-nginx-stream", conf_path.as_posix(), input_text=conf)
     run_systemctl("reload-nginx")
     logger.info(
-        "synced nginx shared-443: panel=%s routes=%s",
+        "synced nginx shared-443: panel=%s owner=%s routes=%s",
         ",".join(panel_snis),
+        owner,
         ",".join(f"{sni}->{backend}" for sni, backend in routes),
     )
 
