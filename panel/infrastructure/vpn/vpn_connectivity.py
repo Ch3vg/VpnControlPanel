@@ -69,19 +69,31 @@ def _probe_connect_hosts(
 ) -> list[str]:
     """Hosts to dial for the probe client.
 
-    Prefer per-config / profile share host (as end users do), then vpn.public_host.
-    Loopback is only a last resort when allow_loopback=True (legacy non-mux).
-    For mux profiles (share_public_port set) loopback must stay off — otherwise the
-    probe bypasses DNS/nginx and reports false "online".
+    Prefer per-config / profile share host (as end users do).
+    For mux profiles (allow_loopback=False) ONLY that host is tried — never
+    vpn.public_host or 127.0.0.1. Falling back to the panel hostname bypasses
+    DNS for the share host: ClientHello SNI still hits the nginx map.
+    Loopback / public_host fallbacks stay only for legacy non-mux profiles.
     """
     hosts: list[str] = []
-    for candidate in (prefer_host, settings.vpn.public_host):
+    prefer = (prefer_host or "").strip()
+    if prefer:
+        hosts.append(prefer)
+    if not allow_loopback:
+        return hosts
+    for candidate in (settings.vpn.public_host, "127.0.0.1"):
         value = (candidate or "").strip()
         if value and value not in hosts:
             hosts.append(value)
-    if allow_loopback and "127.0.0.1" not in hosts:
-        hosts.append("127.0.0.1")
     return hosts
+
+
+def _host_resolves(host: str) -> bool:
+    try:
+        socket.getaddrinfo(host, 0, type=socket.SOCK_STREAM)
+        return True
+    except OSError:
+        return False
 
 
 def _probe_dial_port(
@@ -104,11 +116,14 @@ def _probe_prefer_host(snapshot: ConfigVersionSnapshot, settings: PanelSettings)
     profile = settings.vpn.profiles.get(snapshot.profile.value)
     if profile is not None and (profile.share_public_host or "").strip():
         return profile.share_public_host.strip()
-    return None
+    if not _probe_allow_loopback(snapshot, settings):
+        # Mux profiles must not fall back to panel vpn.public_host.
+        return None
+    return (settings.vpn.public_host or "").strip() or None
 
 
 def _probe_allow_loopback(snapshot: ConfigVersionSnapshot, settings: PanelSettings) -> bool:
-    """Disable loopback fallback when traffic is expected via public mux :443."""
+    """Disable loopback/panel-host fallback when traffic is expected via public mux :443."""
     profile = settings.vpn.profiles.get(snapshot.profile.value)
     if profile is None:
         return True
@@ -394,10 +409,11 @@ def _probe_via_xray(snapshot: ConfigVersionSnapshot, settings: PanelSettings) ->
         return VpnConnectivityProbe(reachable=None, detail="xray binary not found")
 
     prefer = _probe_prefer_host(snapshot, settings)
+    allow_loopback = _probe_allow_loopback(snapshot, settings)
     hosts = _probe_connect_hosts(
         settings,
         prefer_host=prefer,
-        allow_loopback=_probe_allow_loopback(snapshot, settings),
+        allow_loopback=allow_loopback,
     )
     if not hosts:
         return VpnConnectivityProbe(reachable=None, detail="no probe host (set share_public_host or vpn.public_host)")
@@ -405,6 +421,13 @@ def _probe_via_xray(snapshot: ConfigVersionSnapshot, settings: PanelSettings) ->
     timeout = settings.vpn.connectivity_probe_timeout_seconds
     last = VpnConnectivityProbe(reachable=False, detail="connectivity probe failed")
     for host in hosts:
+        if (
+            not allow_loopback
+            and host not in {"127.0.0.1", "::1", "localhost"}
+            and not _host_resolves(host)
+        ):
+            last = VpnConnectivityProbe(reachable=False, detail=f"DNS failed for {host}")
+            continue
         socks_port = _pick_free_tcp_port()
         client_config = _build_xray_client_config(
             snapshot, host=host, socks_port=socks_port, settings=settings,
@@ -421,7 +444,8 @@ def _probe_via_xray(snapshot: ConfigVersionSnapshot, settings: PanelSettings) ->
             probe_url=settings.vpn.connectivity_probe_url,
         )
         if last.reachable:
-            return last
+            port = _probe_dial_port(snapshot, host, settings)
+            return VpnConnectivityProbe(reachable=True, detail=f"via {host}:{port}")
     return last
 
 
@@ -431,10 +455,11 @@ def _probe_via_hysteria(snapshot: ConfigVersionSnapshot, settings: PanelSettings
         return VpnConnectivityProbe(reachable=None, detail="hysteria binary not found")
 
     prefer = _probe_prefer_host(snapshot, settings)
+    allow_loopback = _probe_allow_loopback(snapshot, settings)
     hosts = _probe_connect_hosts(
         settings,
         prefer_host=prefer,
-        allow_loopback=_probe_allow_loopback(snapshot, settings),
+        allow_loopback=allow_loopback,
     )
     if not hosts:
         return VpnConnectivityProbe(reachable=None, detail="no probe host (set share_public_host or vpn.public_host)")
@@ -448,6 +473,13 @@ def _probe_via_hysteria(snapshot: ConfigVersionSnapshot, settings: PanelSettings
     last = VpnConnectivityProbe(reachable=False, detail="connectivity probe failed")
     try:
         for host in hosts:
+            if (
+                not allow_loopback
+                and host not in {"127.0.0.1", "::1", "localhost"}
+                and not _host_resolves(host)
+            ):
+                last = VpnConnectivityProbe(reachable=False, detail=f"DNS failed for {host}")
+                continue
             socks_port = _pick_free_tcp_port()
             client_config = _build_hysteria_client_config(
                 snapshot,
@@ -468,7 +500,8 @@ def _probe_via_hysteria(snapshot: ConfigVersionSnapshot, settings: PanelSettings
                 probe_url=settings.vpn.connectivity_probe_url,
             )
             if last.reachable:
-                return last
+                port = _probe_dial_port(snapshot, host, settings)
+                return VpnConnectivityProbe(reachable=True, detail=f"via {host}:{port}")
         return last
     finally:
         ca_path.unlink(missing_ok=True)

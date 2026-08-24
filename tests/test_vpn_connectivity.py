@@ -88,10 +88,10 @@ def test_probe_dial_port_uses_share_public_port_for_hostname(panel_settings) -> 
         prefer_host="foo.example.com",
         allow_loopback=_probe_allow_loopback(snapshot, settings),
     )
-    assert hosts[0] == "foo.example.com"
-    # Loopback fallback disabled; 127.0.0.1 may still appear only if it is vpn.public_host.
-    if settings.vpn.public_host != "127.0.0.1":
-        assert "127.0.0.1" not in hosts
+    assert hosts == ["foo.example.com"]
+    # Mux: never fall back to panel vpn.public_host (would bypass share-host DNS).
+    assert settings.vpn.public_host not in hosts
+    assert "127.0.0.1" not in hosts
 
     client = _build_xray_client_config(
         snapshot,
@@ -100,6 +100,27 @@ def test_probe_dial_port_uses_share_public_port_for_hostname(panel_settings) -> 
         settings=settings,
     )
     assert client["outbounds"][0]["settings"]["vnext"][0]["port"] == 443
+
+
+def test_mux_probe_hosts_without_prefer_are_empty(panel_settings) -> None:
+    from panel.infrastructure.vpn.vpn_connectivity import _probe_connect_hosts
+
+    hosts = _probe_connect_hosts(
+        panel_settings,
+        prefer_host=None,
+        allow_loopback=False,
+    )
+    assert hosts == []
+
+
+def test_legacy_probe_hosts_include_public_and_loopback(panel_settings) -> None:
+    from panel.infrastructure.vpn.vpn_connectivity import _probe_connect_hosts
+
+    settings = panel_settings.model_copy(
+        update={"vpn": panel_settings.vpn.model_copy(update={"public_host": "vpn.example.com"})},
+    )
+    hosts = _probe_connect_hosts(settings, prefer_host=None, allow_loopback=True)
+    assert hosts == ["vpn.example.com", "127.0.0.1"]
 
 
 def test_build_xray_grpc_client_uses_pinned_peer_cert_sha256(panel_settings) -> None:
@@ -270,7 +291,7 @@ def test_probe_config_connectivity_success(panel_settings, tmp_path, monkeypatch
 
     probe = probe_config_connectivity(snapshot, settings)
     assert probe.reachable is True
-    assert probe.detail is None
+    assert probe.detail == "via vpn.example.com:8443"
 
 
 def test_probe_config_connectivity_uses_cache(panel_settings, monkeypatch: pytest.MonkeyPatch) -> None:

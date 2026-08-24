@@ -123,7 +123,7 @@ def probe_config_availability(
             online=True,
             systemd_active=runtime.systemd_active,
             port_listening=runtime.port_listening,
-            detail=None,
+            detail=connectivity.detail,
         )
     return ServiceRuntimeProbe(
         online=False,

@@ -231,7 +231,7 @@ tls_key_file: /etc/letsencrypt/live/example.com/privkey.pem
 
 При **создании** конфига можно указать свой `share_public_host` (поддомен): он хранится в БД, используется в share URI и как TLS/SNI для xHTTP/gRPC/Hysteria; для Reality — только dial-адрес (`@host`), `sni=` остаётся dest. Mux пересобирает маршруты по **всем** live xHTTP/gRPC конфигам (разные host → разные backend).
 
-Connectivity probe для mux-профилей (`share_public_port`) ходит на **публичный host:443** (как клиент), без fallback на `127.0.0.1:internal` — иначе проверка «зелёная» при несуществующем DNS.
+Connectivity probe для mux-профилей (`share_public_port`) ходит **только** на `share_public_host` (per-config или профиля) и `share_public_port` — как клиент. Без fallback на `vpn.public_host` и без `127.0.0.1:internal`: иначе SNI всё равно попадёт в nginx map, а DNS share-хоста не проверяется (ложное «online»). Нет DNS у share-хоста → offline с `DNS failed for …`.
 
 ### Regenerate policy при создании
 
