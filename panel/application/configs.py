@@ -8,6 +8,7 @@ from panel.config import PanelSettings
 from panel.domain.entities.user import User
 from panel.domain.entities.vpn_config import VpnConfig
 from panel.domain.value_objects.protocol import VpnProtocolType
+from panel.domain.value_objects.regenerate_policy import RegeneratePolicy
 from panel.infrastructure.persistence.repositories.vpn_config import ConfigListResult, VpnConfigRepository
 from panel.infrastructure.vpn.systemd_unit import remove_config_unit
 
@@ -79,3 +80,43 @@ class DeleteConfigUseCase:
             {"config_id": str(config_id)},
             user_id=user.id,
         )
+
+
+class UpdateRegeneratePolicyUseCase:
+    def __init__(
+        self,
+        settings: PanelSettings,
+        configs: VpnConfigRepository,
+        audit: AuditService,
+    ) -> None:
+        self._settings = settings
+        self._configs = configs
+        self._audit = audit
+
+    async def execute(
+        self,
+        config_id: uuid.UUID,
+        user: User,
+        overrides: dict[str, bool],
+    ) -> VpnConfig:
+        config = await self._configs.get_by_id(config_id)
+        if config is None:
+            raise ConfigNotFound
+        profile_settings = self._settings.vpn.profiles.get(config.profile.value)
+        base = RegeneratePolicy.from_stored(
+            config.regenerate_policy.to_stored() if config.regenerate_policy else None,
+            profile=config.profile,
+            profile_settings=profile_settings,
+        )
+        policy = base.model_copy(update=dict(overrides))
+        updated = await self._configs.update_regenerate_policy(
+            config_id,
+            regenerate_policy=policy,
+            updated_by=user.id,
+        )
+        await self._audit.log(
+            "config.regenerate_policy_updated",
+            {"config_id": str(config_id), "regenerate_policy": policy.to_stored()},
+            user_id=user.id,
+        )
+        return updated

@@ -221,3 +221,27 @@ async def test_create_config_stores_regenerate_policy(
         assert model.regenerate_policy["rotate_short_ids"] is False
         assert model.regenerate_policy["rotate_dest"] is True
         assert model.regenerate_policy["rotate_client_id"] is True
+
+
+@pytest.mark.asyncio
+async def test_patch_regenerate_policy(
+    api_client: AsyncClient,
+    auth_headers: dict[str, str],
+    sample_config: uuid.UUID,
+    db_engine: AsyncEngine,
+) -> None:
+    response = await api_client.patch(
+        f"/api/v1/configs/{sample_config}/regenerate-policy",
+        headers=auth_headers,
+        json={"regenerate_policy": {"rotate_port": False, "rotate_dest": False}},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["regenerate_policy"]["rotate_port"] is False
+    assert body["regenerate_policy"]["rotate_dest"] is False
+
+    async with create_session_factory(db_engine)() as session:
+        result = await session.execute(select(VpnConfigModel).where(VpnConfigModel.id == sample_config))
+        model = result.scalar_one()
+        assert model.regenerate_policy["rotate_port"] is False
+        assert model.regenerate_policy["rotate_dest"] is False

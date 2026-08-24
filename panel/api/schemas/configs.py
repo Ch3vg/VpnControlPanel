@@ -59,6 +59,10 @@ class CreateConfigResponse(BaseModel):
     config_id: str
 
 
+class UpdateRegeneratePolicyRequest(BaseModel):
+    regenerate_policy: dict[str, bool]
+
+
 class RegenerateConfigResponse(BaseModel):
     task_id: str
     config_id: str

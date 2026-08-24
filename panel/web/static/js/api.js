@@ -87,6 +87,10 @@ export class ApiClient {
     return this.request("POST", "/api/v1/configs", payload);
   }
 
+  updateRegeneratePolicy(id, regenerate_policy) {
+    return this.request("PATCH", `/api/v1/configs/${id}/regenerate-policy`, { regenerate_policy });
+  }
+
   regenerateConfig(id) {
     return this.request("POST", `/api/v1/configs/${id}/regenerate`);
   }

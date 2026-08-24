@@ -16,6 +16,7 @@ from panel.api.schemas.configs import (
     CreateConfigResponse,
     RegenerateAllResponse,
     RegenerateConfigResponse,
+    UpdateRegeneratePolicyRequest,
     config_to_detail,
     config_to_list_item,
 )
@@ -26,8 +27,10 @@ from panel.application.configs import (
     GetConfigUseCase,
     ListConfigsQuery,
     ListConfigsUseCase,
+    UpdateRegeneratePolicyUseCase,
 )
 from panel.application.create_config import CreateConfigUseCase
+from panel.domain.value_objects.regenerate_policy import RegeneratePolicy
 from panel.application.create_share_link import (
     ConfigNotShareable,
     CreateShareLinkUseCase,
@@ -262,6 +265,7 @@ async def get_config_status(
 async def get_config(
     config_id: uuid.UUID,
     _user: CurrentUserDep,
+    settings: SettingsDep,
     session: AsyncSession = Depends(get_db_session),
 ) -> ConfigDetailResponse:
     use_case = GetConfigUseCase(VpnConfigRepository(session))
@@ -269,6 +273,34 @@ async def get_config(
         config = await use_case.execute(config_id)
     except ConfigNotFound:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found") from None
+    detail = config_to_detail(config)
+    if detail.regenerate_policy is None:
+        profile_settings = settings.vpn.profiles.get(config.profile.value)
+        detail.regenerate_policy = RegeneratePolicy.for_profile(
+            config.profile,
+            profile_settings,
+        ).to_stored()
+    return detail
+
+
+@router.patch("/{config_id}/regenerate-policy", response_model=ConfigDetailResponse)
+async def update_regenerate_policy(
+    config_id: uuid.UUID,
+    body: UpdateRegeneratePolicyRequest,
+    user: CurrentUserDep,
+    settings: SettingsDep,
+    session: AsyncSession = Depends(get_db_session),
+) -> ConfigDetailResponse:
+    use_case = UpdateRegeneratePolicyUseCase(
+        settings,
+        VpnConfigRepository(session),
+        make_audit_service(settings, session),
+    )
+    try:
+        config = await use_case.execute(config_id, user, body.regenerate_policy)
+    except ConfigNotFound:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found") from None
+    await session.commit()
     return config_to_detail(config)
 
 

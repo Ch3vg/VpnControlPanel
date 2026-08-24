@@ -37,6 +37,38 @@ const REGENERATE_POLICY_FIELDS = {
   ],
 };
 
+function policyFieldsForProfile(profile) {
+  return REGENERATE_POLICY_FIELDS[profile] || [];
+}
+
+function renderPolicyChecksHtml(profile, values = {}) {
+  const fields = policyFieldsForProfile(profile);
+  if (!fields.length) return "";
+  return `
+    <div class="policy-checks">
+      ${fields
+        .map((item) => {
+          const checked = values[item.key] ?? item.default;
+          return `
+            <label class="policy-check">
+              <input type="checkbox" data-policy-key="${escapeHtml(item.key)}" ${checked ? "checked" : ""}>
+              <span>${escapeHtml(item.label)}</span>
+            </label>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function readPolicyChecks(container) {
+  const regenerate_policy = {};
+  container?.querySelectorAll("input[data-policy-key]").forEach((input) => {
+    regenerate_policy[input.dataset.policyKey] = input.checked;
+  });
+  return regenerate_policy;
+}
+
 const STATUS_LABELS = {
   pending: "Ожидание",
   processing: "Обработка",
@@ -684,17 +716,7 @@ function openCreateDialog() {
   const policyFieldsEl = dialog.querySelector("#create-policy-fields");
 
   function syncPolicyFields() {
-    const fields = REGENERATE_POLICY_FIELDS[profileEl.value] || [];
-    policyFieldsEl.innerHTML = fields
-      .map(
-        (item) => `
-          <label style="display:flex;gap:0.5rem;align-items:center;margin:0.25rem 0">
-            <input type="checkbox" data-policy-key="${escapeHtml(item.key)}" ${item.default ? "checked" : ""}>
-            <span>${escapeHtml(item.label)}</span>
-          </label>
-        `,
-      )
-      .join("");
+    policyFieldsEl.innerHTML = renderPolicyChecksHtml(profileEl.value);
   }
 
   function syncProfiles() {
@@ -717,10 +739,7 @@ function openCreateDialog() {
     const submitBtn = dialog.querySelector("button[type=submit]");
     submitBtn.disabled = true;
 
-    const regenerate_policy = {};
-    policyFieldsEl.querySelectorAll("input[data-policy-key]").forEach((input) => {
-      regenerate_policy[input.dataset.policyKey] = input.checked;
-    });
+    const regenerate_policy = readPolicyChecks(policyFieldsEl);
 
     try {
       const result = await api.createConfig({
@@ -800,7 +819,14 @@ async function refreshConfigDetail(configId) {
       api.getConfig(configId),
       api.getConfigStatus(configId),
     ]);
-    renderConfigDetailContent(config, status);
+    const bodyEl = document.getElementById("detail-body");
+    const alreadyRendered =
+      bodyEl?.dataset.configId === configId && bodyEl.querySelector("#detail-status-slot");
+    if (alreadyRendered) {
+      patchConfigDetailStatus(config, status);
+    } else {
+      renderConfigDetailContent(config, status);
+    }
     if (config.status !== "pending" && config.status !== "processing" && config.status !== "active") {
       stopPolling();
     }
@@ -810,49 +836,125 @@ async function refreshConfigDetail(configId) {
   }
 }
 
+function patchConfigDetailStatus(config, status) {
+  const statusSlot = document.getElementById("detail-status-slot");
+  if (statusSlot) {
+    statusSlot.innerHTML = configStatusDisplay(config.status, status.runtime_online ?? null);
+  }
+  const runtimeSlot = document.getElementById("detail-runtime-slot");
+  if (runtimeSlot) {
+    runtimeSlot.innerHTML = runtimeStatusLine(status) || "";
+  }
+  const errorSlot = document.getElementById("detail-error-slot");
+  if (errorSlot) {
+    const message = config.error_message || status.error_message;
+    errorSlot.innerHTML = message
+      ? `<div class="error-box">${escapeHtml(message)}</div>`
+      : "";
+  }
+  const versionEl = document.getElementById("detail-version-value");
+  if (versionEl) {
+    versionEl.textContent = config.current_version ?? "—";
+  }
+  const taskEl = document.getElementById("detail-task-value");
+  if (taskEl) {
+    taskEl.textContent = status.task_id ?? config.last_task_id ?? "—";
+  }
+  const updatedEl = document.getElementById("detail-updated-value");
+  if (updatedEl) {
+    updatedEl.textContent = formatDate(config.updated_at);
+  }
+  // After regenerate finishes, refresh version card once without wiping share-result.
+  const versionCard = document.getElementById("detail-version-card");
+  const version = config.current_version_detail;
+  if (versionCard && version) {
+    versionCard.innerHTML = `
+      <h2 class="card-title">Текущая версия</h2>
+      <div class="detail-grid">
+        <dl class="detail-item"><dt>Порт</dt><dd>${version.port}</dd></dl>
+        <dl class="detail-item"><dt>Public key</dt><dd>${escapeHtml(version.public_key || "—")}</dd></dl>
+        <dl class="detail-item"><dt>Cert fingerprint</dt><dd>${escapeHtml(version.cert_fingerprint || "—")}</dd></dl>
+        <dl class="detail-item"><dt>Создана</dt><dd>${escapeHtml(formatDate(version.created_at))}</dd></dl>
+      </div>
+    `;
+  }
+  const regenerateBtn = document.getElementById("regenerate-btn");
+  if (regenerateBtn) {
+    const canRegenerate = config.status === "active" || config.status === "failed";
+    regenerateBtn.disabled = !canRegenerate;
+  }
+  const canShare = config.status === "active";
+  document.getElementById("share-secure-btn") && (document.getElementById("share-secure-btn").disabled = !canShare);
+  document.getElementById("share-insecure-btn") && (document.getElementById("share-insecure-btn").disabled = !canShare);
+}
+
 function renderConfigDetailContent(config, status) {
   const bodyEl = document.getElementById("detail-body");
   const version = config.current_version_detail;
   const canShare = config.status === "active";
   const canRegenerate = config.status === "active" || config.status === "failed";
+  const profile = config.profile || (config.protocol === "hysteria2" ? "hysteria2" : "xray-reality");
+  const policyValues = config.regenerate_policy || {};
+  const policyHtml = renderPolicyChecksHtml(profile, policyValues);
 
+  bodyEl.dataset.configId = config.id;
   bodyEl.innerHTML = `
     <section class="card">
       <div class="toolbar">
         <h1 class="card-title" style="margin:0">${escapeHtml(config.name)}</h1>
-        ${configStatusDisplay(config.status, status.runtime_online ?? null)}
+        <div id="detail-status-slot">${configStatusDisplay(config.status, status.runtime_online ?? null)}</div>
       </div>
-      ${runtimeStatusLine(status)}
+      <div id="detail-runtime-slot">${runtimeStatusLine(status) || ""}</div>
       <div class="detail-grid">
         <dl class="detail-item"><dt>ID</dt><dd>${escapeHtml(config.id)}</dd></dl>
         <dl class="detail-item"><dt>Протокол</dt><dd>${escapeHtml(config.protocol)}</dd></dl>
-        <dl class="detail-item"><dt>Версия</dt><dd>${config.current_version ?? "—"}</dd></dl>
+        <dl class="detail-item"><dt>Профиль</dt><dd>${escapeHtml(profile)}</dd></dl>
+        <dl class="detail-item"><dt>Версия</dt><dd id="detail-version-value">${config.current_version ?? "—"}</dd></dl>
         <dl class="detail-item"><dt>Создан</dt><dd>${escapeHtml(formatDate(config.created_at))}</dd></dl>
-        <dl class="detail-item"><dt>Обновлён</dt><dd>${escapeHtml(formatDate(config.updated_at))}</dd></dl>
-        <dl class="detail-item"><dt>Task ID</dt><dd>${escapeHtml(status.task_id ?? config.last_task_id ?? "—")}</dd></dl>
+        <dl class="detail-item"><dt>Обновлён</dt><dd id="detail-updated-value">${escapeHtml(formatDate(config.updated_at))}</dd></dl>
+        <dl class="detail-item"><dt>Task ID</dt><dd id="detail-task-value">${escapeHtml(status.task_id ?? config.last_task_id ?? "—")}</dd></dl>
         ${
           status.task_status
             ? `<dl class="detail-item"><dt>Статус задачи</dt><dd>${escapeHtml(status.task_status)}</dd></dl>`
             : ""
         }
       </div>
-      ${
-        config.error_message || status.error_message
-          ? `<div class="error-box">${escapeHtml(config.error_message || status.error_message)}</div>`
-          : ""
-      }
+      <div id="detail-error-slot">
+        ${
+          config.error_message || status.error_message
+            ? `<div class="error-box">${escapeHtml(config.error_message || status.error_message)}</div>`
+            : ""
+        }
+      </div>
     </section>
 
     ${
       version
         ? `
-      <section class="card">
+      <section class="card" id="detail-version-card">
         <h2 class="card-title">Текущая версия</h2>
         <div class="detail-grid">
           <dl class="detail-item"><dt>Порт</dt><dd>${version.port}</dd></dl>
           <dl class="detail-item"><dt>Public key</dt><dd>${escapeHtml(version.public_key || "—")}</dd></dl>
           <dl class="detail-item"><dt>Cert fingerprint</dt><dd>${escapeHtml(version.cert_fingerprint || "—")}</dd></dl>
           <dl class="detail-item"><dt>Создана</dt><dd>${escapeHtml(formatDate(version.created_at))}</dd></dl>
+        </div>
+      </section>
+    `
+        : `<section class="card" id="detail-version-card" hidden></section>`
+    }
+
+    ${
+      policyHtml
+        ? `
+      <section class="card">
+        <h2 class="card-title">При regenerate ротировать</h2>
+        <fieldset class="field" id="detail-policy-fieldset" style="margin-bottom:0.75rem">
+          <legend>Параметры</legend>
+          <div id="detail-policy-fields">${policyHtml}</div>
+        </fieldset>
+        <div class="btn-row">
+          <button type="button" class="secondary" id="save-policy-btn">Сохранить политику</button>
         </div>
       </section>
     `
@@ -889,6 +991,9 @@ function renderConfigDetailContent(config, status) {
   document.getElementById("regenerate-btn")?.addEventListener("click", () =>
     handleRegenerate(config.id),
   );
+  document.getElementById("save-policy-btn")?.addEventListener("click", () =>
+    handleSavePolicy(config.id),
+  );
   bindShareTtlSelect("share-ttl");
   document.getElementById("share-secure-btn")?.addEventListener("click", () =>
     handleShare(config.id, true),
@@ -902,6 +1007,21 @@ function renderConfigDetailContent(config, status) {
     loadShareLinksList("share-links-body", { config_id: config.id }),
   );
   loadShareLinksList("share-links-body", { config_id: config.id });
+}
+
+async function handleSavePolicy(configId) {
+  const fieldsEl = document.getElementById("detail-policy-fields");
+  const regenerate_policy = readPolicyChecks(fieldsEl);
+  const button = document.getElementById("save-policy-btn");
+  if (button) button.disabled = true;
+  try {
+    await api.updateRegeneratePolicy(configId, regenerate_policy);
+    showToast("Политика regenerate сохранена", "success");
+  } catch (error) {
+    showToast(errorMessage(error), "error");
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 async function handleRegenerate(configId) {

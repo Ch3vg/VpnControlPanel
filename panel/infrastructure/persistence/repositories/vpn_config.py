@@ -286,6 +286,23 @@ class VpnConfigRepository:
             model.current_version + 1,
         )
 
+    async def update_regenerate_policy(
+        self,
+        config_id: uuid.UUID,
+        *,
+        regenerate_policy: RegeneratePolicy,
+        updated_by: uuid.UUID,
+    ) -> VpnConfig:
+        model = await self._get_model(config_id)
+        if model is None:
+            raise ValueError(f"Config not found: {config_id}")
+        model.regenerate_policy = regenerate_policy.to_stored()
+        model.updated_by = updated_by
+        model.updated_at = datetime.now(UTC)
+        await self._session.flush()
+        version_model = await self._load_current_version(model)
+        return _config_to_entity(model, version_model=version_model)
+
     async def get_regenerate_policy_raw(self, config_id: uuid.UUID) -> dict | None:
         model = await self._get_model(config_id, active_only=False)
         if model is None:
