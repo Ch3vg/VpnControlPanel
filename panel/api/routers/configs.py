@@ -33,6 +33,7 @@ from panel.application.configs import (
     UpdateRegeneratePolicyUseCase,
 )
 from panel.application.create_config import CreateConfigUseCase
+from panel.domain.value_objects.share_public_host import InvalidSharePublicHost
 from panel.application.update_config_data import (
     ConfigDataUnavailable,
     GetConfigDataUseCase,
@@ -119,13 +120,25 @@ async def create_config(
             make_audit_service(settings, session),
         )
         policy_overrides = body.regenerate_policy
-        result = await use_case.execute(
-            body.name,
-            body.protocol,
-            body.profile,  # type: ignore[arg-type]
-            user,
-            regenerate_policy=policy_overrides,
-        )
+        try:
+            result = await use_case.execute(
+                body.name,
+                body.protocol,
+                body.profile,  # type: ignore[arg-type]
+                user,
+                regenerate_policy=policy_overrides,
+                share_public_host=body.share_public_host,
+            )
+        except InvalidSharePublicHost as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from None
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from None
     finally:
         await broker.close()
     return CreateConfigResponse(task_id=result.task_id, config_id=str(result.config_id))

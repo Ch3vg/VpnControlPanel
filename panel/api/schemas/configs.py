@@ -42,6 +42,7 @@ class CreateConfigRequest(BaseModel):
     protocol: VpnProtocolType
     profile: ConfigProfile | None = None
     regenerate_policy: dict[str, bool] | None = None
+    share_public_host: str | None = Field(default=None, max_length=253)
 
     @model_validator(mode="after")
     def default_profile(self) -> CreateConfigRequest:
@@ -156,6 +157,7 @@ class ConfigDetailResponse(BaseModel):
     updated_at: datetime
     current_version_detail: ConfigVersionResponse | None = None
     regenerate_policy: dict[str, bool] | None = None
+    share_public_host: str | None = None
 
 
 def _version_response(version: VpnConfigVersion) -> ConfigVersionResponse:
@@ -205,4 +207,5 @@ def config_to_detail(config: VpnConfig) -> ConfigDetailResponse:
         updated_at=config.updated_at,
         current_version_detail=version_detail,
         regenerate_policy=policy,
+        share_public_host=config.share_public_host,
     )

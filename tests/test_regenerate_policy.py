@@ -250,6 +250,7 @@ async def test_create_config_stores_regenerate_policy(
             "name": "PolicyCfg",
             "protocol": "xray",
             "profile": "xray-reality",
+            "share_public_host": "auth.example.com",
             "regenerate_policy": {
                 "rotate_port": False,
                 "rotate_short_ids": False,
@@ -268,6 +269,7 @@ async def test_create_config_stores_regenerate_policy(
         assert model.regenerate_policy["rotate_short_ids"] is False
         assert model.regenerate_policy["rotate_dest"] is True
         assert model.regenerate_policy["rotate_client_id"] is True
+        assert model.share_public_host == "auth.example.com"
 
 
 @pytest.mark.asyncio

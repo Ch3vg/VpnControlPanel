@@ -38,3 +38,4 @@ class VpnConfig:
     updated_at: datetime
     current_version_detail: VpnConfigVersion | None = None
     regenerate_policy: RegeneratePolicy | None = None
+    share_public_host: str | None = None

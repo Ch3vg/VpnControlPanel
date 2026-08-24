@@ -61,6 +61,7 @@ def _config_to_entity(
         updated_at=model.updated_at,
         current_version_detail=version_detail,
         regenerate_policy=_policy_from_model(model),
+        share_public_host=(model.share_public_host or None),
     )
 
 
@@ -75,6 +76,7 @@ class ConfigVersionSnapshot:
     public_key: str
     cert_fingerprint: str
     config_data: dict
+    share_public_host: str | None = None
 
 
 class VpnConfigRepository:
@@ -143,7 +145,9 @@ class VpnConfigRepository:
         profile: ConfigProfile,
         created_by: uuid.UUID,
         regenerate_policy: RegeneratePolicy | None = None,
+        share_public_host: str | None = None,
     ) -> VpnConfig:
+        host = (share_public_host or "").strip() or None
         model = VpnConfigModel(
             name=name,
             protocol=protocol.value,
@@ -151,6 +155,7 @@ class VpnConfigRepository:
             status=ConfigStatus.PENDING.value,
             current_version=None,
             regenerate_policy=regenerate_policy.to_stored() if regenerate_policy is not None else None,
+            share_public_host=host,
             is_active=True,
             created_by=created_by,
             updated_by=created_by,
@@ -363,7 +368,14 @@ class VpnConfigRepository:
             public_key=version_model.public_key,
             cert_fingerprint=version_model.cert_fingerprint,
             config_data=dict(version_model.config_data),
+            share_public_host=(config_model.share_public_host or None),
         )
+
+    async def get_share_public_host(self, config_id: uuid.UUID) -> str | None:
+        model = await self._get_model(config_id, active_only=False)
+        if model is None:
+            raise ValueError(f"Config not found: {config_id}")
+        return (model.share_public_host or None)
 
     async def list_current_version_snapshots(self) -> list[ConfigVersionSnapshot]:
         result = await self._session.execute(

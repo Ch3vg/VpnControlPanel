@@ -114,4 +114,5 @@ class ResolveShareUseCase:
             cert_fingerprint=snapshot.cert_fingerprint,
             label=snapshot.name,
             secure=secure,
+            share_public_host=snapshot.share_public_host,
         )

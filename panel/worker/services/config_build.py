@@ -84,6 +84,8 @@ async def build_and_persist_version(
         else:
             preferred_port = previous_port
 
+    share_public_host = await repo.get_share_public_host(config_id)
+
     if target_version > 1 and ctx.settings.systemd.per_config:
         await asyncio.to_thread(
             stop_config_unit,
@@ -100,6 +102,7 @@ async def build_and_persist_version(
         preferred_grpc_sni=preferred_grpc_sni,
         preferred_grpc_service_name=preferred_grpc_service_name,
         policy=policy,
+        share_public_host=share_public_host,
     )
     result.port = listening_port(profile, result.config_data, profile_settings)
     await asyncio.to_thread(

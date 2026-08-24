@@ -229,6 +229,8 @@ tls_key_file: /etc/letsencrypt/live/example.com/privkey.pem
 
 Тогда create/regenerate **по умолчанию** использует эти пути (`rotate_tls: false`). Если в политике конфига включить **Self-signed TLS (вместо LE профиля)** (`rotate_tls: true`), билдер игнорирует `tls_*_file` и пишет self-signed в каталог этого конфига (`…/configs/{id}/`). Так можно держать один LE-конфиг на `share_public_host` и отдельно self-signed на другом порту/режиме — но SNI mux на `:443` по одному hostname по-прежнему один backend (последний sync).
 
+При **создании** конфига можно указать свой `share_public_host` (поддомен): он хранится в БД, используется в share URI и как TLS/SNI для xHTTP/gRPC/Hysteria; для Reality — только dial-адрес (`@host`), `sni=` остаётся dest. Mux пересобирает маршруты по **всем** live xHTTP/gRPC конфигам (разные host → разные backend).
+
 ### Regenerate policy при создании
 
 `POST /api/v1/configs` принимает опциональное `regenerate_policy` (флаги `rotate_port`, `rotate_client_id`, `rotate_reality_keys`, `rotate_short_ids`, `rotate_dest`, `rotate_path`, `rotate_service_name`, `rotate_tls`, `rotate_auth`, `rotate_obfs`). В админке — чекбоксы «При regenerate ротировать». Старые конфиги с `NULL` в БД используют дефолты `RegeneratePolicy.for_profile`.

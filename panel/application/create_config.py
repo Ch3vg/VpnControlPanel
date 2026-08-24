@@ -11,6 +11,7 @@ from panel.domain.ports.broker import BrokerPort
 from panel.domain.value_objects.config_profile import ConfigProfile
 from panel.domain.value_objects.protocol import VpnProtocolType
 from panel.domain.value_objects.regenerate_policy import RegeneratePolicy
+from panel.domain.value_objects.share_public_host import normalize_share_public_host
 from panel.application.audit_service import AuditService
 from panel.infrastructure.persistence.repositories.vpn_config import VpnConfigRepository
 
@@ -43,10 +44,12 @@ class CreateConfigUseCase:
         profile: ConfigProfile,
         user: User,
         regenerate_policy: RegeneratePolicy | dict | None = None,
+        share_public_host: str | None = None,
     ) -> CreateConfigResult:
         if profile.value not in self._settings.vpn.profiles:
             raise ValueError(f"Unknown profile: {profile.value}")
         profile_settings = self._settings.vpn.profiles[profile.value]
+        host = normalize_share_public_host(share_public_host)
         base = RegeneratePolicy.for_profile(profile, profile_settings)
         if regenerate_policy is None:
             policy = base
@@ -61,6 +64,7 @@ class CreateConfigUseCase:
             profile=profile,
             created_by=user.id,
             regenerate_policy=policy,
+            share_public_host=host,
         )
         await self._session.commit()
 
@@ -83,6 +87,7 @@ class CreateConfigUseCase:
                 "protocol": protocol.value,
                 "profile": profile.value,
                 "name": name,
+                "share_public_host": host,
                 "task_id": task.task_id,
             },
             user_id=user.id,

@@ -77,11 +77,13 @@ class ProfileConfigBuilder:
         preferred_grpc_sni: str | None = None,
         preferred_grpc_service_name: str | None = None,
         policy: RegeneratePolicy | None = None,
+        share_public_host: str | None = None,
     ) -> BuildResult:
         profile_settings = self._settings.vpn.profiles[profile.value]
         template_path = self._resolve_template_path(profile_settings.template_file)
         config = load_template(template_path)
         resolved = policy or RegeneratePolicy.for_profile(profile, profile_settings)
+        host_override = (share_public_host or "").strip() or None
 
         if profile is ConfigProfile.XRAY_REALITY:
             result = self._build_xray_reality(
@@ -102,6 +104,7 @@ class ProfileConfigBuilder:
                 preferred_grpc_sni=preferred_grpc_sni,
                 preferred_grpc_service_name=preferred_grpc_service_name,
                 policy=resolved,
+                share_public_host=host_override,
             )
         elif profile is ConfigProfile.XRAY_XHTTP:
             result = self._build_xray_xhttp(
@@ -111,6 +114,7 @@ class ProfileConfigBuilder:
                 exclude_ports=exclude_ports,
                 preferred_port=preferred_port,
                 policy=resolved,
+                share_public_host=host_override,
             )
         elif profile is ConfigProfile.HYSTERIA2:
             result = self._build_hysteria2(
@@ -120,6 +124,7 @@ class ProfileConfigBuilder:
                 exclude_ports=exclude_ports,
                 preferred_port=preferred_port,
                 policy=resolved,
+                share_public_host=host_override,
             )
         else:
             raise ValueError(f"Unsupported profile: {profile}")
@@ -215,14 +220,16 @@ class ProfileConfigBuilder:
 
             sync_reality_shared_443(self._settings, result.config_data)
         elif profile in {ConfigProfile.XRAY_XHTTP, ConfigProfile.XRAY_GRPC}:
-            from panel.infrastructure.vpn.nginx_shared_443 import sync_reality_shared_443
+            from panel.infrastructure.vpn.nginx_shared_443 import (
+                _load_live_configs_for_profile,
+                sync_reality_shared_443,
+            )
 
-            # Refresh mux so this profile's share_public_host route stays current.
+            # Refresh mux so per-config share hosts stay current alongside Reality.
             reality_live = None
             try:
-                from panel.infrastructure.vpn.nginx_shared_443 import _load_live_profile_config
-
-                reality_live = _load_live_profile_config(self._settings, ConfigProfile.XRAY_REALITY.value)
+                lives = _load_live_configs_for_profile(self._settings, ConfigProfile.XRAY_REALITY.value)
+                reality_live = lives[0] if lives else None
             except Exception:
                 reality_live = None
             if reality_live is not None:
@@ -246,9 +253,10 @@ class ProfileConfigBuilder:
         cert_fingerprint: str = "",
         label: str = "",
         secure: bool = True,
+        share_public_host: str | None = None,
     ) -> list[str]:
         profile_settings = self._settings.vpn.profiles[profile.value]
-        host = (profile_settings.share_public_host or self._settings.vpn.public_host or "").strip()
+        host = self._effective_share_host(profile_settings, share_public_host)
         return build_share_uris(
             profile,
             config_data,
@@ -259,6 +267,17 @@ class ProfileConfigBuilder:
             secure=secure,
             public_port=profile_settings.share_public_port,
         )
+
+    def _effective_share_host(
+        self,
+        profile: VpnProfileSettings,
+        share_public_host: str | None = None,
+    ) -> str:
+        for candidate in (share_public_host, profile.share_public_host, self._settings.vpn.public_host):
+            value = (candidate or "").strip()
+            if value:
+                return value
+        return "localhost"
 
     def _resolve_template_path(self, template_file: str) -> Path:
         path = Path(template_file)
@@ -344,6 +363,7 @@ class ProfileConfigBuilder:
         preferred_grpc_sni: str | None = None,
         preferred_grpc_service_name: str | None = None,
         policy: RegeneratePolicy,
+        share_public_host: str | None = None,
     ) -> BuildResult:
         inbound_tag = profile.inbound_tag
         port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
@@ -361,8 +381,9 @@ class ProfileConfigBuilder:
         tls = inbound["streamSettings"]["tlsSettings"]
         tls["alpn"] = ["h2"]
         tls.pop("fingerprint", None)
-        tls_name = self._tls_server_name(profile)
-        if (profile.share_public_host or "").strip():
+        pinned_host = (share_public_host or profile.share_public_host or "").strip()
+        if pinned_host:
+            tls_name = self._tls_server_name(profile, share_public_host)
             tls["serverName"] = tls_name
         elif profile.grpc_sni_hosts:
             keep_sni = preferred_grpc_sni or (previous.grpc_sni if previous else None)
@@ -370,6 +391,9 @@ class ProfileConfigBuilder:
                 tls["serverName"] = keep_sni
             else:
                 tls["serverName"] = random.choice(profile.grpc_sni_hosts)
+            tls_name = tls["serverName"]
+        else:
+            tls_name = self._tls_server_name(profile, share_public_host)
 
         grpc = inbound["streamSettings"]["grpcSettings"]
         if profile.grpc_service_names:
@@ -406,6 +430,7 @@ class ProfileConfigBuilder:
         exclude_ports: set[int] | None,
         preferred_port: int | None,
         policy: RegeneratePolicy,
+        share_public_host: str | None = None,
     ) -> BuildResult:
         inbound_tag = profile.inbound_tag
         port = pick_port(profile.port_candidates, exclude=exclude_ports, preferred=preferred_port)
@@ -423,7 +448,7 @@ class ProfileConfigBuilder:
         stream = inbound["streamSettings"]
         stream["security"] = "tls"
         xhttp = stream["xhttpSettings"]
-        tls_name = self._tls_server_name(profile)
+        tls_name = self._tls_server_name(profile, share_public_host)
         xhttp["host"] = tls_name
         xhttp["mode"] = "stream-up"
         if previous and previous.xhttp_path and not policy.rotate_path:
@@ -462,6 +487,7 @@ class ProfileConfigBuilder:
         exclude_ports: set[int] | None,
         preferred_port: int | None,
         policy: RegeneratePolicy,
+        share_public_host: str | None = None,
     ) -> BuildResult:
         from panel.infrastructure.vpn.hysteria2 import generate_auth_password
 
@@ -486,7 +512,7 @@ class ProfileConfigBuilder:
         else:
             obfs_password = generate_auth_password()
 
-        tls_name = self._tls_server_name(profile)
+        tls_name = self._tls_server_name(profile, share_public_host)
         private_pem, cert_pem, fingerprint, extra = self._resolve_tls(
             profile, previous, dns_names=[tls_name], rotate_tls=policy.rotate_tls, prefix="hysteria",
         )
@@ -510,16 +536,24 @@ class ProfileConfigBuilder:
             extra_files=extra_files,
         )
 
-    def _tls_server_name(self, profile: VpnProfileSettings | None = None) -> str:
+    def _tls_server_name(
+        self,
+        profile: VpnProfileSettings | None = None,
+        share_public_host: str | None = None,
+    ) -> str:
         """SNI / cert SAN for self-signed profiles.
 
-        Prefer profile.share_public_host (e.g. Hysteria on hy.example.com), else vpn.public_host.
+        Prefer per-config share_public_host, then profile.share_public_host, else vpn.public_host.
         """
-        if profile is not None:
-            override = (profile.share_public_host or "").strip()
-            if override:
-                return override
-        return (self._settings.vpn.public_host or "").strip() or "localhost"
+        for candidate in (
+            share_public_host,
+            (profile.share_public_host if profile is not None else None),
+            self._settings.vpn.public_host,
+        ):
+            value = (candidate or "").strip()
+            if value:
+                return value
+        return "localhost"
 
     def _resolve_tls(
         self,

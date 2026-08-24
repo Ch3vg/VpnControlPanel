@@ -1009,6 +1009,14 @@ function openCreateDialog() {
         <label for="create-profile">Профиль</label>
         <select id="create-profile"></select>
       </div>
+      <div class="field">
+        <label for="create-share-host">Публичный хост / поддомен</label>
+        <input id="create-share-host" placeholder="например foo.ch3vg.site" autocomplete="off">
+        <div class="muted" style="margin-top:0.35rem;font-size:0.85rem">
+          Адрес в share URI и SNI/TLS для xHTTP/gRPC/Hysteria. Пусто — из профиля panel.yaml.
+          Для Reality — только адрес (@host), sni= остаётся dest.
+        </div>
+      </div>
       <fieldset class="field" id="create-policy-fieldset">
         <legend>При regenerate ротировать</legend>
         <div id="create-policy-fields"></div>
@@ -1056,6 +1064,7 @@ function openCreateDialog() {
         name: dialog.querySelector("#create-name").value.trim(),
         protocol: protocolEl.value,
         profile: profileEl.value,
+        share_public_host: dialog.querySelector("#create-share-host").value.trim() || null,
         regenerate_policy,
       });
       dialog.close();
@@ -1212,6 +1221,7 @@ function renderConfigDetailContent(config, status) {
         <dl class="detail-item"><dt>ID</dt><dd>${escapeHtml(config.id)}</dd></dl>
         <dl class="detail-item"><dt>Протокол</dt><dd>${escapeHtml(config.protocol)}</dd></dl>
         <dl class="detail-item"><dt>Профиль</dt><dd>${escapeHtml(profile)}</dd></dl>
+        <dl class="detail-item"><dt>Публичный хост</dt><dd>${escapeHtml(config.share_public_host || "— (из профиля)")}</dd></dl>
         <dl class="detail-item"><dt>Версия</dt><dd id="detail-version-value">${config.current_version ?? "—"}</dd></dl>
         <dl class="detail-item"><dt>Создан</dt><dd>${escapeHtml(formatDate(config.created_at))}</dd></dl>
         <dl class="detail-item"><dt>Обновлён</dt><dd id="detail-updated-value">${escapeHtml(formatDate(config.updated_at))}</dd></dl>

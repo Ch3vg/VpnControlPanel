@@ -113,27 +113,60 @@ def _inbound_backend(inbound: dict[str, Any], *, fallback_listen: str | None) ->
     return f"{listen}:{port}"
 
 
-def _load_live_profile_config(settings: PanelSettings, profile_key: str) -> dict[str, Any] | None:
+def _load_live_configs_for_profile(
+    settings: PanelSettings,
+    profile_key: str,
+) -> list[dict[str, Any]]:
     profile = settings.vpn.profiles.get(profile_key)
     if profile is None:
-        return None
+        return []
     root = settings.systemd.xray_config_dir
+    if profile_key == ConfigProfile.HYSTERIA2.value:
+        root = settings.systemd.hysteria_config_dir
     if not root.is_dir():
-        return None
+        return []
     tag = profile.inbound_tag
-    for path in sorted(root.glob("*/config.json")):
+    items: list[dict[str, Any]] = []
+    pattern = "*/config.yaml" if profile_key == ConfigProfile.HYSTERIA2.value else "*/config.json"
+    for path in sorted(root.glob(pattern)):
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            if profile_key == ConfigProfile.HYSTERIA2.value:
+                import yaml
+
+                data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            else:
+                data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, Exception):
+            continue
+        if not isinstance(data, dict):
             continue
         if not tag:
-            return data
+            items.append(data)
+            continue
         try:
             find_inbound(data, tag)
-            return data
+            items.append(data)
         except KeyError:
             continue
-    return None
+    return items
+
+
+def _tls_host_from_config(profile_key: str, data: dict[str, Any], profile: VpnProfileSettings) -> str | None:
+    if profile_key == ConfigProfile.HYSTERIA2.value:
+        host = ((data.get("tls") or {}).get("sni") or "").strip()
+        return host or None
+    try:
+        inbound = find_inbound(data, profile.inbound_tag)
+    except Exception:
+        return None
+    stream = inbound.get("streamSettings") or {}
+    tls = stream.get("tlsSettings") or {}
+    host = (tls.get("serverName") or "").strip()
+    if host:
+        return host
+    xhttp = stream.get("xhttpSettings") or {}
+    host = (xhttp.get("host") or "").strip()
+    return host or None
 
 
 def _routes_for_mux_profile(
@@ -144,25 +177,42 @@ def _routes_for_mux_profile(
     profile = settings.vpn.profiles.get(profile_key)
     if profile is None or not shared_443_enabled(profile):
         return []
-    data = config_data or _load_live_profile_config(settings, profile_key)
-    if data is None:
-        return []
-    try:
-        inbound = find_inbound(data, profile.inbound_tag)
-    except Exception:
-        return []
-    backend = _inbound_backend(inbound, fallback_listen=profile.listen_address)
-    if not backend:
-        return []
+
+    if profile_key == ConfigProfile.XRAY_REALITY.value:
+        data = config_data or (_load_live_configs_for_profile(settings, profile_key) or [None])[0]
+        if data is None:
+            return []
+        try:
+            inbound = find_inbound(data, profile.inbound_tag)
+        except Exception:
+            return []
+        backend = _inbound_backend(inbound, fallback_listen=profile.listen_address)
+        if not backend:
+            return []
+        return [(sni, backend) for sni in reality_sni_hosts(profile, data)]
 
     routes: list[tuple[str, str]] = []
-    if profile_key == ConfigProfile.XRAY_REALITY.value:
-        for sni in reality_sni_hosts(profile, data):
-            routes.append((sni, backend))
-    else:
-        host = (profile.share_public_host or settings.vpn.public_host or "").strip()
-        if host:
-            routes.append((host, backend))
+    live_items = _load_live_configs_for_profile(settings, profile_key)
+    if config_data is not None:
+        # Ensure the just-written config is included even before disk scan races.
+        live_items = [config_data, *[item for item in live_items if item is not config_data]]
+
+    seen_backends: set[str] = set()
+    for data in live_items:
+        try:
+            inbound = find_inbound(data, profile.inbound_tag)
+        except Exception:
+            continue
+        backend = _inbound_backend(inbound, fallback_listen=profile.listen_address)
+        if not backend or backend in seen_backends:
+            continue
+        host = _tls_host_from_config(profile_key, data, profile)
+        if not host:
+            host = (profile.share_public_host or settings.vpn.public_host or "").strip()
+        if not host:
+            continue
+        routes.append((host, backend))
+        seen_backends.add(backend)
     return routes
 
 
@@ -183,6 +233,7 @@ def sync_reality_shared_443(settings: PanelSettings, config_data: dict[str, Any]
     for key in _MUX_PROFILES:
         if key == ConfigProfile.XRAY_REALITY.value:
             continue
+        # Pass None so all live xHTTP/gRPC configs are scanned (multi-config hosts).
         routes.extend(_routes_for_mux_profile(settings, key, None))
 
     conf = render_shared_443_stream_conf(
