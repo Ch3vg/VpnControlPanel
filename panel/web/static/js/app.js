@@ -1,5 +1,4 @@
 import { ApiError, api } from "./api.js";
-import { createConfigEditor } from "./lib/config-editor.bundle.js";
 
 const PROFILES = {
   xray: [
@@ -1029,18 +1028,20 @@ function renderConfigDetailContent(config, status) {
       <section class="card" id="config-editor-card">
         <div class="toolbar">
           <h2 class="card-title" style="margin:0">Конфигурация</h2>
-          <div class="btn-row">
-            <span id="config-editor-format" class="muted"></span>
-            <button type="button" class="secondary" id="config-editor-load">Перезагрузить</button>
-            <button type="button" id="config-editor-save" disabled>Сохранить</button>
-          </div>
+          <button type="button" class="secondary" id="config-editor-toggle">Редактировать</button>
         </div>
-        <p class="muted" style="margin:0.5rem 0 0.75rem">
-          Редактор с подсветкой и проверкой синтаксиса.
-          Xray — JSON, Hysteria2 — YAML. Сохранение перезапишет live-файлы.
-        </p>
-        <div id="config-editor-host" class="config-editor-host"></div>
-        <div id="config-editor-status" class="muted" style="margin-top:0.5rem"></div>
+        <div id="config-editor-panel" class="hidden">
+          <div class="toolbar" style="margin-top:0.75rem">
+            <span id="config-editor-format" class="muted"></span>
+            <div class="btn-row">
+              <button type="button" class="secondary" id="config-editor-load">Перезагрузить</button>
+              <button type="button" id="config-editor-save" disabled>Сохранить</button>
+              <button type="button" class="secondary" id="config-editor-close">Свернуть</button>
+            </div>
+          </div>
+          <div id="config-editor-host" class="config-editor-host" style="margin-top:0.75rem"></div>
+          <div id="config-editor-status" class="muted" style="margin-top:0.5rem"></div>
+        </div>
       </section>
     `
         : ""
@@ -1129,21 +1130,46 @@ async function handleSavePolicy(configId) {
 }
 
 function bindConfigEditor(configId) {
+  const panel = document.getElementById("config-editor-panel");
   const host = document.getElementById("config-editor-host");
+  const toggleBtn = document.getElementById("config-editor-toggle");
+  const closeBtn = document.getElementById("config-editor-close");
   const loadBtn = document.getElementById("config-editor-load");
   const saveBtn = document.getElementById("config-editor-save");
   const statusEl = document.getElementById("config-editor-status");
   const formatEl = document.getElementById("config-editor-format");
-  if (!host || !loadBtn || !saveBtn) return;
+  if (!panel || !host || !toggleBtn || !loadBtn || !saveBtn) return;
 
   let editor = null;
   let loaded = false;
   let currentFormat = "json";
+  let open = false;
+
+  function syncSaveEnabled() {
+    const ok = loaded && editor && !editor.hasLintErrors();
+    saveBtn.disabled = !ok;
+  }
+
+  function collapseEditor() {
+    open = false;
+    panel.classList.add("hidden");
+    toggleBtn.classList.remove("hidden");
+    if (editor) {
+      editor.destroy();
+      editor = null;
+      host.innerHTML = "";
+    }
+    loaded = false;
+    saveBtn.disabled = true;
+    if (statusEl) statusEl.textContent = "";
+    if (formatEl) formatEl.textContent = "";
+  }
 
   async function loadEditor() {
     loadBtn.disabled = true;
-    statusEl.textContent = "Загрузка…";
+    if (statusEl) statusEl.textContent = "Загрузка…";
     try {
+      const { createConfigEditor } = await import("./lib/config-editor.bundle.js");
       const result = await api.getConfigData(configId);
       currentFormat = result.format === "yaml" ? "yaml" : "json";
       if (formatEl) {
@@ -1157,52 +1183,63 @@ function bindConfigEditor(configId) {
       editor = createConfigEditor(host, {
         format: currentFormat,
         doc: result.content || "",
+        onChange: () => syncSaveEnabled(),
       });
       loaded = true;
-      saveBtn.disabled = false;
-      statusEl.textContent = `Версия ${result.version} · ${result.profile}`;
+      syncSaveEnabled();
+      if (statusEl) {
+        statusEl.textContent = `Версия ${result.version} · ${result.profile}`;
+      }
       editor.focus();
     } catch (error) {
-      statusEl.textContent = "";
+      if (statusEl) statusEl.textContent = "";
       showToast(errorMessage(error), "error");
     } finally {
       loadBtn.disabled = false;
     }
   }
 
-  loadBtn.addEventListener("click", () => {
-    loadEditor();
+  async function openEditor() {
+    open = true;
+    panel.classList.remove("hidden");
+    toggleBtn.classList.add("hidden");
+    await loadEditor();
+  }
+
+  toggleBtn.addEventListener("click", () => {
+    if (!open) openEditor();
   });
+  closeBtn?.addEventListener("click", () => collapseEditor());
+  loadBtn.addEventListener("click", () => loadEditor());
 
   saveBtn.addEventListener("click", async () => {
     if (!loaded || !editor) {
-      showToast("Сначала загрузите конфигурацию", "error");
+      showToast("Сначала откройте редактор", "error");
       return;
     }
     if (editor.hasLintErrors()) {
+      syncSaveEnabled();
       showToast("Исправьте ошибки синтаксиса перед сохранением", "error");
       return;
     }
     if (!confirm("Сохранить конфигурацию и перезаписать live-файлы?")) return;
     saveBtn.disabled = true;
-    statusEl.textContent = "Сохранение…";
+    if (statusEl) statusEl.textContent = "Сохранение…";
     try {
       const result = await api.updateConfigData(configId, {
         content: editor.getValue(),
         format: currentFormat,
       });
       editor.setValue(result.content || "");
-      statusEl.textContent = `Сохранено · версия ${result.version}`;
+      syncSaveEnabled();
+      if (statusEl) statusEl.textContent = `Сохранено · версия ${result.version}`;
       showToast("Конфигурация сохранена", "success");
     } catch (error) {
-      statusEl.textContent = "";
+      if (statusEl) statusEl.textContent = "";
       showToast(errorMessage(error), "error");
-    } finally {
-      saveBtn.disabled = false;
+      syncSaveEnabled();
     }
   });
-
-  loadEditor();
 }
 
 async function handleRegenerate(configId) {
