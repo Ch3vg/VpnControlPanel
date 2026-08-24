@@ -150,7 +150,7 @@ POLICY_FIELD_LABELS: dict[str, str] = {
     "rotate_dest": "dest / serverNames",
     "rotate_path": "xHTTP path",
     "rotate_service_name": "gRPC serviceName",
-    "rotate_tls": "TLS cert (self-signed)",
+    "rotate_tls": "Self-signed TLS (вместо LE профиля)",
     "rotate_auth": "Hysteria auth",
     "rotate_obfs": "Hysteria obfs",
 }

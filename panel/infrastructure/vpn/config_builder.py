@@ -530,11 +530,16 @@ class ProfileConfigBuilder:
         rotate_tls: bool,
         prefix: str,
     ) -> tuple[str, str, str, tuple[str, str, dict[str, str]]]:
-        """Return private_pem, cert_pem, fingerprint, (cert_path, key_path, extra_files)."""
-        external = _load_external_tls(profile)
-        if external is not None:
-            private_pem, cert_pem, fingerprint, cert_path, key_path = external
-            return private_pem, cert_pem, fingerprint, (cert_path, key_path, {})
+        """Return private_pem, cert_pem, fingerprint, (cert_path, key_path, extra_files).
+
+        Profile tls_cert_file/tls_key_file (LE) are used only when rotate_tls is False.
+        When rotate_tls is True, always mint a self-signed pair for this config.
+        """
+        if not rotate_tls:
+            external = _load_external_tls(profile)
+            if external is not None:
+                private_pem, cert_pem, fingerprint, cert_path, key_path = external
+                return private_pem, cert_pem, fingerprint, (cert_path, key_path, {})
 
         cert_dir = profile.cert_dir or Path("/usr/local/etc/xray/certs")
         file_prefix = profile.cert_prefix or prefix

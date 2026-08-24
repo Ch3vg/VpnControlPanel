@@ -183,6 +183,53 @@ def test_external_tls_paths_skip_extra_files(panel_settings, tmp_path) -> None:
     assert cert_path.read_text(encoding="utf-8") == cert_pem
 
 
+def test_rotate_tls_ignores_profile_le_paths(panel_settings, tmp_path) -> None:
+    private_pem, cert_pem, _fingerprint = generate_self_signed_cert(dns_names=["learn.example.test"])
+    cert_path = tmp_path / "fullchain.pem"
+    key_path = tmp_path / "privkey.pem"
+    cert_path.write_text(cert_pem, encoding="utf-8")
+    key_path.write_text(private_pem, encoding="utf-8")
+
+    profiles = dict(panel_settings.vpn.profiles)
+    profiles["xray-xhttp"] = profiles["xray-xhttp"].model_copy(
+        update={
+            "tls_cert_file": cert_path,
+            "tls_key_file": key_path,
+            "share_public_host": "learn.example.test",
+            "cert_dir": tmp_path / "certs",
+        },
+    )
+    settings = panel_settings.model_copy(
+        update={"vpn": panel_settings.vpn.model_copy(update={"profiles": profiles})},
+    )
+    builder = ProfileConfigBuilder(settings)
+    le = builder.build(
+        ConfigProfile.XRAY_XHTTP,
+        name="LeCfg",
+        policy=RegeneratePolicy.for_profile(
+            ConfigProfile.XRAY_XHTTP,
+            profiles["xray-xhttp"],
+        ),
+    )
+    assert le.extra_files == {}
+    assert le.config_data["inbounds"][0]["streamSettings"]["tlsSettings"]["certificates"][0][
+        "certificateFile"
+    ] == str(cert_path)
+
+    self_signed = builder.build(
+        ConfigProfile.XRAY_XHTTP,
+        name="SelfSigned",
+        policy=RegeneratePolicy(rotate_tls=True, rotate_path=True, rotate_client_id=True),
+    )
+    assert self_signed.extra_files
+    assert "cert" in self_signed.extra_files
+    assert self_signed.cert_fingerprint != le.cert_fingerprint
+    cert_file = self_signed.config_data["inbounds"][0]["streamSettings"]["tlsSettings"]["certificates"][0][
+        "certificateFile"
+    ]
+    assert str(cert_path) not in cert_file
+
+
 @pytest.mark.asyncio
 @patch("panel.api.routers.configs.HttpBrokerClient")
 async def test_create_config_stores_regenerate_policy(

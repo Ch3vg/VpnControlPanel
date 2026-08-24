@@ -227,7 +227,7 @@ tls_cert_file: /etc/letsencrypt/live/example.com/fullchain.pem
 tls_key_file: /etc/letsencrypt/live/example.com/privkey.pem
 ```
 
-Тогда create/regenerate **не** перезаписывает cert/key self-signed и пишет в inbound эти пути. Дефолт `rotate_tls` для новых конфигов становится `false`.
+Тогда create/regenerate **по умолчанию** использует эти пути (`rotate_tls: false`). Если в политике конфига включить **Self-signed TLS (вместо LE профиля)** (`rotate_tls: true`), билдер игнорирует `tls_*_file` и пишет self-signed в каталог этого конфига (`…/configs/{id}/`). Так можно держать один LE-конфиг на `share_public_host` и отдельно self-signed на другом порту/режиме — но SNI mux на `:443` по одному hostname по-прежнему один backend (последний sync).
 
 ### Regenerate policy при создании
 
