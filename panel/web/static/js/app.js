@@ -37,6 +37,10 @@ const REGENERATE_POLICY_FIELDS = {
   ],
 };
 
+function policyFieldsForProfile(profile) {
+  return REGENERATE_POLICY_FIELDS[profile] || [];
+}
+
 function isLongPublicKey(value) {
   const text = String(value || "");
   return text.includes("BEGIN ") || text.length > 96;
