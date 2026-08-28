@@ -229,6 +229,8 @@ tls_key_file: /etc/letsencrypt/live/example.com/privkey.pem
 
 Тогда create/regenerate **по умолчанию** использует эти пути (`rotate_tls: false`). Если в политике конфига включить **Self-signed TLS (вместо LE профиля)** (`rotate_tls: true`), билдер игнорирует `tls_*_file` и пишет self-signed в каталог этого конфига (`…/configs/{id}/`). Так можно держать один LE-конфиг на `share_public_host` и отдельно self-signed на другом порту/режиме — но SNI mux на `:443` по одному hostname по-прежнему один backend (последний sync).
 
+**Права:** каталоги certbot (`live`/`archive`) по умолчанию `0700 root`, а worker — пользователь `vpn-worker`. `make deploy` / `make update` / `make fix-config-perms` вызывают `fix-letsencrypt-perms.sh`: группа `ssl-cert`, `vpn-worker`+`vpn-panel` в ней, ACL на LE, бинарь `/usr/local/bin/vpn-le-perms` и hook `renewal-hooks/deploy/vpn-panel-le-perms.sh` (после `certbot renew` права восстанавливаются). Вручную: `sudo make fix-le-perms`, затем `sudo systemctl restart 'vpn-worker@*'`.
+
 При **создании** конфига можно указать свой `share_public_host` (поддомен): он хранится в БД, используется в share URI и как TLS/SNI для xHTTP/gRPC/Hysteria; для Reality — только dial-адрес (`@host`), `sni=` остаётся dest. Mux пересобирает маршруты по **всем** live xHTTP/gRPC конфигам (разные host → разные backend).
 
 Connectivity probe для mux-профилей (`share_public_port`) ходит **только** на `share_public_host` (per-config или профиля) и `share_public_port` — как клиент. Без fallback на `vpn.public_host` и без `127.0.0.1:internal`: иначе SNI всё равно попадёт в nginx map, а DNS share-хоста не проверяется (ложное «online»). Нет DNS у share-хоста → offline с `DNS failed for …`.
@@ -456,7 +458,7 @@ curl -s -X POST http://127.0.0.1:8000/auth/login \
 | Порт в UI ≠ порт Xray | Задайте `active_config_path` в `panel.yaml` = путь из unit VPN-сервиса; `make update` |
 | `sudo: command not allowed` / `COMMAND=reload` | В unit не в кавычках `VPN_SYSTEMCTL_CMD` → вызывается `sudo reload`. Исправьте unit, установите sudoers, см. ниже |
 | `Permission denied: panel.yaml` | Worker не в группе `vpn-panel`: `sudo usermod -aG vpn-panel vpn-worker`, каталог conf `750 root:vpn-panel`, файл `640`; `make fix-config-perms` |
-| `Permission denied: .../letsencrypt/.../fullchain.pem` | При `rotate_tls: false` worker читает `tls_*_file` профиля. `/etc/letsencrypt/live` и `archive` обычно `0700 root` — `vpn-worker` не проходит. Либо включите «Self-signed TLS» в политике, либо дайте доступ: `sudo chgrp -R ssl-cert /etc/letsencrypt/{live,archive}` && `sudo chmod 750 /etc/letsencrypt/{live,archive}` && `sudo chmod 640 /etc/letsencrypt/archive/*/privkey*.pem` && `sudo usermod -aG ssl-cert vpn-worker` && restart `vpn-worker@*` |
+| `Permission denied: .../letsencrypt/.../fullchain.pem` | Worker не читает LE: `sudo make fix-le-perms && sudo systemctl restart 'vpn-worker@*'`. Deploy/update делают это сами; после ручного certbot без hook — тот же target. |
 | `Permission denied: .../xray/tmp*` | Worker не может писать в каталог live-конфига Xray: `sudo make fix-config-perms` (каталог `/usr/local/etc/xray` → `770 root:vpn-panel`, конфиги `660`) |
 | `Permission denied: /etc/systemd/system/tmp*` при regenerate | Старая версия писала unit-файлы без sudo. `sudo make update` (переустановит `vpn-systemctl` с `write-unit`) |
 | `git pull` / `would be overwritten by merge` в `deploy/scripts/` | Старый `make update` менял права на скрипты. Один раз: `git checkout -- deploy/scripts/ && git pull`, затем `sudo make update` (новая версия не трогает index) |

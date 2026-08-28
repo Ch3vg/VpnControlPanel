@@ -48,6 +48,10 @@ nginx -t && systemctl reload nginx || true
 log "Removing sudoers"
 rm -f /etc/sudoers.d/vpn-worker
 
+log "Removing Let's Encrypt ACL helpers"
+rm -f /usr/local/bin/vpn-le-perms
+rm -f /etc/letsencrypt/renewal-hooks/deploy/vpn-panel-le-perms.sh
+
 if [[ "${KEEP_DB}" -eq 0 ]]; then
   log "Dropping PostgreSQL database ${VCP_DB_NAME}"
   sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL || true

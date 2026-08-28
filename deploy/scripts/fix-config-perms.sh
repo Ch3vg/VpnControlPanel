@@ -19,4 +19,7 @@ if [[ -f "${VCP_CONFIG_DIR}/broker.yaml" ]]; then
   chmod 640 "${VCP_CONFIG_DIR}/broker.yaml"
 fi
 
+# Profile tls_*_file (Let's Encrypt) must be readable by vpn-worker.
+bash "${SCRIPT_DIR}/fix-letsencrypt-perms.sh"
+
 log "Config permissions fixed (${VCP_CONFIG_DIR}: 750 root:${VCP_PANEL_USER}, *.yaml: 640; live VPN dirs: 770 root:${VCP_PANEL_USER})"

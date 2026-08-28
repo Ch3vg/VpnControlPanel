@@ -24,4 +24,7 @@ chown "${VCP_PANEL_USER}:${VCP_PANEL_USER}" "${VCP_DATA_DIR}"
 chown "${VCP_WORKER_USER}:${VCP_WORKER_USER}" "${VCP_VPN_CONFIGS_DIR}"
 fix_vpn_live_dirs
 
+# Prepare LE ACL early (no-op if certbot has not issued certs yet).
+bash "${SCRIPT_DIR}/fix-letsencrypt-perms.sh"
+
 log "Users and directories ready"

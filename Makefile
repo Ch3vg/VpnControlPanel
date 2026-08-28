@@ -1,7 +1,8 @@
 SHELL := /bin/bash
 .PHONY: help init-env secrets render deploy deploy-deps deploy-users deploy-db install-app \
         setup-config migrate create-admin regenerate-all install-systemd install-sudoers install-nginx \
-        restart status broker-status logs chmod-scripts check-scripts uninstall uninstall-keep-db update
+        fix-config-perms fix-le-perms restart status broker-status logs chmod-scripts check-scripts \
+        uninstall uninstall-keep-db update
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -53,8 +54,11 @@ install-systemd: ## Install and start systemd units (root)
 install-sudoers: ## Install worker sudoers (root)
 	sudo bash deploy/scripts/install-sudoers.sh
 
-fix-config-perms: ## Fix panel.yaml permissions for worker (root)
+fix-config-perms: ## Fix panel.yaml + Let's Encrypt ACL for worker (root)
 	sudo bash deploy/scripts/fix-config-perms.sh
+
+fix-le-perms: ## Fix Let's Encrypt ACL + certbot renew hook (root)
+	sudo bash deploy/scripts/fix-letsencrypt-perms.sh
 
 install-nginx: ## Install nginx site config (root)
 	sudo bash deploy/scripts/install-nginx.sh
