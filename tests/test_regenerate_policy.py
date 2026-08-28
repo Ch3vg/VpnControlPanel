@@ -230,6 +230,26 @@ def test_rotate_tls_ignores_profile_le_paths(panel_settings, tmp_path) -> None:
     assert str(cert_path) not in cert_file
 
 
+def test_load_external_tls_permission_denied_is_explicit(panel_settings, tmp_path, monkeypatch) -> None:
+    from panel.infrastructure.vpn import config_builder as cb
+
+    cert_path = tmp_path / "fullchain.pem"
+    key_path = tmp_path / "privkey.pem"
+    cert_path.write_text("x", encoding="utf-8")
+    key_path.write_text("y", encoding="utf-8")
+    profiles = dict(panel_settings.vpn.profiles)
+    profiles["xray-xhttp"] = profiles["xray-xhttp"].model_copy(
+        update={"tls_cert_file": cert_path, "tls_key_file": key_path},
+    )
+
+    def boom(self):
+        raise PermissionError(13, "Permission denied", str(self))
+
+    monkeypatch.setattr(cb.Path, "is_file", boom)
+    with pytest.raises(PermissionError, match="Cannot read profile TLS"):
+        cb._load_external_tls(profiles["xray-xhttp"])
+
+
 @pytest.mark.asyncio
 @patch("panel.api.routers.configs.HttpBrokerClient")
 async def test_create_config_stores_regenerate_policy(

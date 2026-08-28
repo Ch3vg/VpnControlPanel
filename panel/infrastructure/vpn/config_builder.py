@@ -596,10 +596,19 @@ def _load_external_tls(
         return None
     cert_path = Path(profile.tls_cert_file)
     key_path = Path(profile.tls_key_file)
-    if not cert_path.is_file() or not key_path.is_file():
-        return None
-    cert_pem = cert_path.read_text(encoding="utf-8")
-    private_pem = key_path.read_text(encoding="utf-8")
+    try:
+        if not cert_path.is_file() or not key_path.is_file():
+            return None
+        cert_pem = cert_path.read_text(encoding="utf-8")
+        private_pem = key_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        # pathlib.is_file() may raise PermissionError when /etc/letsencrypt/live is 0700.
+        raise PermissionError(
+            f"Cannot read profile TLS ({cert_path}): {exc}. "
+            "vpn-worker needs read access to Let's Encrypt "
+            "(group ssl-cert on live/archive + privkey), "
+            "or enable «Self-signed TLS» in regenerate policy."
+        ) from exc
     if not cert_matches_private_key(cert_pem, private_pem):
         return None
     fingerprint = cert_fingerprint_sha256(cert_pem)
